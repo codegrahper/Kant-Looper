@@ -108,7 +108,7 @@ call() {
   # set -e 안전 패턴 (command substitution 실패 시에도 rc 검출)
   local rc=0
   local runner_output
-  if runner_output="$("$SKILL_LIB/timeout-runner.sh" run "$timeout" "$log_file" "$response_file" "${cmd[@]}" < /dev/null)"; then
+  if runner_output="$("$SKILL_LIB/timeout-runner.sh" run "$timeout" "$log_file" "$response_file" "$worktree" "${cmd[@]}" < /dev/null)"; then
     rc=0
   else
     rc=$?

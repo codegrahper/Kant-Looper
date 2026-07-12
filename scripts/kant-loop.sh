@@ -739,6 +739,22 @@ cmd_run() {
   worktree="$(create_worktree "$repo" "$branch")"
   echo "$worktree" > "$state_dir/worktree.txt"
 
+  # worktree 정합성 검증 — 외부 도구가 실제로 격리된 곳에서 실행됨을 실행 전에 보장.
+  # 인자 전달 실수 등으로 $repo나 엉뚱한 경로가 worktree로 잘못 넘어가는 사고를 차단.
+  local repo_realpath worktree_realpath
+  repo_realpath="$(cd "$repo" && pwd -P)"
+  worktree_realpath="$(cd "$worktree" && pwd -P)"
+
+  if [ "$repo_realpath" = "$worktree_realpath" ]; then
+    fail_run "$state_dir" "WORKTREE_IS_REPO" "worktree resolves to original checkout: $worktree_realpath"
+    exit 1
+  fi
+
+  if ! git -C "$repo_realpath" worktree list --porcelain | grep -Fx "worktree $worktree_realpath" >/dev/null; then
+    fail_run "$state_dir" "UNREGISTERED_WORKTREE" "cwd is not registered in git worktree list: $worktree_realpath"
+    exit 1
+  fi
+
   if [ "$detach" = "1" ]; then
     log "detach mode — running in background"
     nohup "$SCRIPT_DIR/kant-loop.sh" _run_mode "$mode" "$task_md" "$state_dir" "$worktree" "$tool" "$model" > "$state_dir/detached.log" 2>&1 &

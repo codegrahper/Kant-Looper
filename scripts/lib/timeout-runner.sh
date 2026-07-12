@@ -33,19 +33,35 @@ get_timeout_for_role() {
 # ---------------------------------------------------------------------------
 # 메인 함수
 # ---------------------------------------------------------------------------
-# 인자: timeout_secs log_file response_file cmd [args...]
+# 인자: timeout_secs log_file response_file cwd_dir cmd [args...]
+# cwd_dir는 필수 — 외부 CLI 프로세스는 반드시 이 디렉터리(격리된 worktree)를
+# 작업 디렉터리로 삼아 실행된다. 누락/빈 값/존재하지 않는 경로는 즉시 실패
+# (fail-closed). 절대 부모 쉘의 cwd로 조용히 폴백하지 않는다.
 # 출력:
 #   response_file: stdout (raw)
 #   log_file: stderr + 마스킹된 prompt 정보
 # 종료 코드:
 #   0 = 정상
 #   124 = timeout
+#   200 = 잘못된 호출(인자 부족/cwd 무효)
 #   65  = INVALID_OUTPUT (python wrapper 사용 시 도구 자체 에러)
 #   기타 = 도구 에러
 
 run_with_timeout() {
-  local timeout_secs="$1" log_file="$2" response_file="$3"
-  shift 3
+  if [ "$#" -lt 5 ]; then
+    echo "ERROR: run_with_timeout expects: timeout log response cwd cmd [args...]" >&2
+    return 200
+  fi
+
+  local timeout_secs="$1" log_file="$2" response_file="$3" cwd_dir="$4"
+  shift 4
+
+  if [ -z "$cwd_dir" ] || [ ! -d "$cwd_dir" ]; then
+    echo "ERROR: invalid cwd: '$cwd_dir'" >&2
+    return 200
+  fi
+  # 심볼릭 링크 등 정규화 — 이후 모든 실행 분기가 이 값을 강제로 사용
+  cwd_dir="$(cd "$cwd_dir" && pwd -P)"
 
   if [ -z "$timeout_secs" ]; then
     timeout_secs=1800
@@ -92,7 +108,7 @@ run_with_timeout() {
   local exit_code=0
 
   if [ "$use_python" = "1" ]; then
-    python3 - "$timeout_secs" "$response_file" "$log_file" "$@" <<'PYEOF'
+    python3 - "$timeout_secs" "$response_file" "$log_file" "$cwd_dir" "$@" <<'PYEOF'
 import os
 import sys
 import subprocess
@@ -102,21 +118,24 @@ import signal
 timeout_secs = int(sys.argv[1])
 response_file = sys.argv[2]
 log_file = sys.argv[3]
-cmd = sys.argv[4:]
+cwd_dir = sys.argv[4]
+cmd = sys.argv[5:]
 
 with open(response_file, 'wb') as out, open(log_file, 'a') as err:
-    err.write(f"[python-runner] spawning: {cmd[:1]} (args: {len(cmd)-1})\n")
+    err.write(f"[python-runner] spawning: {cmd[:1]} (args: {len(cmd)-1}) cwd={cwd_dir}\n")
     err.flush()
 
     start = time.time()
     try:
         # macOS 호환: start_new_session=True (POSIX) - process group 분리
+        # cwd는 fail-closed로 검증된 값 — 폴백 없이 그대로 강제 전달
         proc = subprocess.Popen(
             cmd,
             stdout=out,
             stderr=err,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
+            cwd=cwd_dir,
         )
         try:
             exit_code = proc.wait(timeout=timeout_secs)
@@ -146,12 +165,12 @@ with open(response_file, 'wb') as out, open(log_file, 'a') as err:
 PYEOF
     exit_code=$?
   elif [ -n "$timeout_cmd" ]; then
-    "$timeout_cmd" "$timeout_secs" "$@" > "$response_file" 2>> "$log_file"
+    ( cd "$cwd_dir" && "$timeout_cmd" "$timeout_secs" "$@" ) > "$response_file" 2>> "$log_file"
     exit_code=$?
   else
     # 둘 다 없으면 그냥 실행 (timeout 강제 불가)
     echo "[run-with-timeout] WARN: no timeout command available, running without timeout" >> "$log_file"
-    "$@" > "$response_file" 2>> "$log_file"
+    ( cd "$cwd_dir" && "$@" ) > "$response_file" 2>> "$log_file"
     exit_code=$?
   fi
 
@@ -185,10 +204,13 @@ if [ "${1:-}" = "timeout-for" ]; then
 fi
 
 cat <<EOF
-timeout-runner.sh — 외부 호출 timeout 강제
+timeout-runner.sh — 외부 호출 timeout 강제 + cwd 격리
 
 사용법:
-  timeout-runner.sh run <timeout_secs> <log_file> <response_file> <cmd> [args...]
+  timeout-runner.sh run <timeout_secs> <log_file> <response_file> <cwd_dir> <cmd> [args...]
   timeout-runner.sh timeout-for <role>     # role별 기본 timeout
+
+cwd_dir는 필수. 존재하지 않거나 비어 있으면 즉시 실패(exit 200) — 부모 쉘의
+cwd로 조용히 폴백하지 않는다.
 EOF
 exit 0

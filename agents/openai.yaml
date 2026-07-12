@@ -1,0 +1,80 @@
+# kant-looper interface — OpenAI 호환 인터페이스 메타
+#
+# 이 파일은 인터페이스 등록용입니다. 실제 로직은 kant-loop.sh + lib/ + adapters/.
+
+name: kant-looper
+display_name: "Kant Looper"
+version: "0.1.0"
+description: |
+  외부 CLI 도구(codex, grok, opencode, agy, claude)를 백그라운드로 호출해
+  작업을 시키고, Claude가 결과를 비판적으로 검증한 뒤 작업 브랜치에 커밋합니다.
+  main 병합은 사용자의 명시적 승인을 기다립니다.
+
+  칸트의 "비판철학"처럼 모든 외부 산출물을 비판적으로 검증하는 루프.
+  이바가 개입하는 순간 그것은 kant-looper가 아닙니다.
+
+phases:
+  - name: dispatch
+    description: TASK.md를 받아서 적절한 도구/모델로 라우팅
+    entry_point: scripts/kant-loop.sh
+
+  - name: verify
+    description: 외부 도구 결과를 verdict-extractor로 추출 + 검증
+    entry_point: scripts/lib/verdict-extractor.sh
+
+  - name: fallback
+    description: 호출 실패 시 다른 도구/모델로 즉시 전환 (claude 최종 폴백)
+    entry_point: scripts/lib/fallback-dispatcher.sh
+
+  - name: commit
+    description: 빈 hooksPath + gpgSign=false 커밋. main 직접 커밋 금지.
+    entry_point: scripts/kant-loop.sh:do_commit
+
+modes:
+  - quick: 단일 호출 (T0~T1, 가벼움)
+  - parallel: 동시 호출 (T2)
+  - full: HPRAR 풀 루프 (T3~T4, 기본값)
+
+agents:
+  - name: codex
+    role: 검증/리뷰
+    models: [gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna]
+
+  - name: grok
+    role: 터미널/시스템 코딩
+    models: [grok-4.5]
+
+  - name: opencode
+    role: 장기 작업/리팩터 (1M 컨텍스트)
+    models: [glm-5.2, glm-4.7, glm-4.7-flash]
+
+  - name: agy
+    role: UI/멀티모달 (Antigravity/Gemini)
+    models: [gemini-3.5-flash, gemini-3.1-pro-preview]
+
+  - name: claude
+    role: 최종 폴백 + self-call
+    models: [MiniMax-M3]
+
+safety:
+  auto_push: false
+  auto_merge: false
+  auto_rebase: false
+  auto_reset_hard: false
+  main_direct_commit: false
+  protected_paths_enforced: true
+  hooks_path_empty_for_commit: true
+  gpg_sign_disabled_for_commit: true
+
+promote_subcommand: "scripts/kant-loop.sh promote BRANCH --target TARGET"
+promote_required_user_action: true
+
+fallback_chain_final: claude:MiniMax-M3
+
+documentation:
+  - SKILL.md
+  - references/loop-flow.md
+  - references/verdict-schema.md
+  - references/safety-promises.md
+  - references/failure-modes.md
+  - references/fallback-table.md

@@ -611,7 +611,7 @@ $(cat "$task_md")
 ## plan 결과
 $(cat "$state_dir/${plan_agent}-plan.json" 2>/dev/null || echo '{}')
 
-## 보고 형식 (implement role)
+    ## 보고 형식 (implement role)
 {
   "verdict": "PASS|CHANGES_REQUESTED|BLOCKED|INVALID_OUTPUT",
   "summary": "string",
@@ -621,6 +621,10 @@ $(cat "$state_dir/${plan_agent}-plan.json" 2>/dev/null || echo '{}')
   "risks": ["..."],
   "notes_for_reviewer": "string"
 }
+
+## 중요: 재시도 루프 방지
+도구를 실행(tool call)한 직후에도 반드시 위에 정의한 JSON 포맷으로 응답을 출력해야 한다.
+도구 실행 후 응답을 출력하지 않고 끝나지 마라. retry loop가 발생하지 않도록 한 번의 구현 후 즉시 JSON과 <verdict> 태그를 포함한 응답을 작성해야 한다.
 EOF
 
     local impl_adapter="$ADAPTERS_DIR/adapter-${impl_agent}.sh"

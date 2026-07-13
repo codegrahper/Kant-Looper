@@ -123,7 +123,7 @@ call() {
 import json, re, sys
 
 path = sys.argv[1]
-last_text = None
+text_parts = []
 for line in open(path, errors='ignore'):
     line = line.strip()
     if not line:
@@ -133,59 +133,74 @@ for line in open(path, errors='ignore'):
         if isinstance(e, dict) and e.get('type') == 'text':
             t = e.get('part', {}).get('text')
             if t:
-                last_text = t
+                text_parts.append(t)
     except Exception:
         continue
 
-if not last_text:
+# Concatenate all text parts (some models emit incremental events)
+full_text = ''.join(text_parts)
+if not full_text:
     sys.exit(1)
 
-# Try ```json ... ``` block first
-m = re.search(r'```json\s*(\{.*?\})\s*```', last_text, re.DOTALL)
+def try_brace_parse(text):
+    depth, in_str, escape, start = 0, False, False, -1
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if in_str:
+            if ch == '\\\\':
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == '{':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth < 0:
+                start = -1
+                depth = 0
+                continue
+            if depth == 0 and start >= 0:
+                candidate = text[start:i+1]
+                try:
+                    d = json.loads(candidate)
+                    if 'verdict' in d:
+                        return candidate
+                except json.JSONDecodeError:
+                    pass
+                start = -1
+    return None
+
+# Try ```json ... ``` block (greedy — captures full nested JSON)
+m = re.search(r'```json\s*(\{.*\})\s*```', full_text, re.DOTALL)
 if m:
     try:
-        json.loads(m.group(1))
-        print(m.group(1), end='')
-        sys.exit(0)
+        d = json.loads(m.group(1))
+        if 'verdict' in d:
+            print(m.group(1), end='')
+            sys.exit(0)
     except json.JSONDecodeError:
         pass
 
-# Extract text before <verdict> tag and find JSON using brace-counting
-verdict_text = last_text
-vidx = last_text.rfind('<verdict>')
+# Extract text before <verdict> tag, then find valid verdict JSON
+verdict_text = full_text
+vidx = full_text.rfind('<verdict>')
 if vidx >= 0:
-    verdict_text = last_text[:vidx]
+    verdict_text = full_text[:vidx]
 
-depth, in_str, escape, start = 0, False, False, -1
-for i, ch in enumerate(verdict_text):
-    if escape:
-        escape = False
-        continue
-    if in_str:
-        if ch == '\\':
-            escape = True
-        elif ch == '"':
-            in_str = False
-        continue
-    if ch == '"':
-        in_str = True
-    elif ch == '{':
-        if depth == 0:
-            start = i
-        depth += 1
-    elif ch == '}':
-        depth -= 1
-        if depth == 0 and start >= 0:
-            candidate = verdict_text[start:i+1]
-            try:
-                json.loads(candidate)
-                print(candidate, end='')
-                sys.exit(0)
-            except json.JSONDecodeError:
-                start = -1
+parsed = try_brace_parse(verdict_text)
+if parsed:
+    print(parsed, end='')
+    sys.exit(0)
 
-# Fallback: extract <verdict> tag
-m2 = re.search(r'<verdict>(\w+)</verdict>', last_text)
+# Fallback: extract <verdict> tag (whitespace-tolerant)
+m2 = re.search(r'<verdict>\s*(\w+)\s*</verdict>', full_text)
 if m2:
     print(json.dumps({
         "verdict": m2.group(1),

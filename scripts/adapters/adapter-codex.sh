@@ -119,10 +119,13 @@ call() {
   cmd+=( "$prompt" )
 
   # 실행 — set -e 안전 패턴 (command substitution 실패 시에도 rc 검출)
-  # FIX (Goal 2): </dev/null 명시. Codex가 stdin 대기하면서 hang하는 것 방지 (skill-codex 규칙)
+  # FIX (Goal 3): KANT_CODEX_RUNTIME 환경변수로 exec 또는 app-server 선택.
+  # 기본값은 exec (기존 동작). app-server는 JSON-RPC over stdio + thread resume + 실시간 이벤트.
+  # FIX (Goal 2): </dev/null 명시는 codex-runtime.sh 내부에서 처리.
+  local runtime="${KANT_CODEX_RUNTIME:-exec}"
   local rc=0
   local runner_output
-  if runner_output="$("$SKILL_LIB/timeout-runner.sh" run "$timeout" "$log_file" "$response_file" "$worktree" "${cmd[@]}" </dev/null)"; then
+  if runner_output="$("$SKILL_LIB/codex-runtime.sh" "$runtime" "$timeout" "$log_file" "$response_file" "$worktree" "$model" "$prompt_file" "$sandbox_mode")"; then
     rc=0
   else
     rc=$?

@@ -165,6 +165,67 @@ do_safety_check() {
   "$LIB_DIR/safety-check.sh" all "$worktree"
 }
 
+# ---------------------------------------------------------------------------
+# verdict의 changed_files가 실제 git diff와 일치하는지 교차검증
+# ---------------------------------------------------------------------------
+# 어댑터(특히 모델이 가벼운 경우)가 도구 호출을 한 번도 안 하고도
+# "changed_files": [...] 를 채운 verdict=PASS를 그대로 내놓는 경우가 실측됨
+# (opencode/glm-4.7, 파일 쓰기 도구 호출 로그 자체가 없었음). gate-runner는
+# 테스트/빌드 설정이 없는 새 프로젝트에서는 no-op으로 통과해버리므로, 이
+# 교차검증이 "실제로 무슨 일이 있었는지"를 확인하는 마지막 방어선이다.
+#
+# 인자: worktree, json_path (verdict JSON 파일 경로)
+# 출력 (stdout): 실제로는 없는데 주장된 파일 목록. 없으면 빈 출력.
+# 종료 코드: 0 = 일치, 1 = 불일치(주장한 파일이 실제 변경 목록에 없음)
+
+verify_changed_files() {
+  local worktree="$1" json_path="$2"
+
+  if [ ! -f "$json_path" ]; then
+    return 0
+  fi
+
+  local claimed
+  claimed="$(python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    for f in (d.get("changed_files") or []):
+        if isinstance(f, str) and f.strip() and f.strip() != "...":
+            print(f.strip())
+except Exception:
+    pass
+' "$json_path" 2>/dev/null)"
+
+  if [ -z "$claimed" ]; then
+    return 0
+  fi
+
+  local actual
+  actual="$(
+    cd "$worktree" && {
+      git diff --name-only --cached 2>/dev/null
+      git diff --name-only 2>/dev/null
+      git ls-files --others --exclude-standard 2>/dev/null
+    } | sort -u
+  )"
+
+  local missing=""
+  local file
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    if ! printf '%s\n' "$actual" | grep -qxF "$file"; then
+      missing="${missing}${file}\n"
+    fi
+  done <<< "$claimed"
+
+  if [ -n "$missing" ]; then
+    printf '%b' "$missing"
+    return 1
+  fi
+  return 0
+}
+
 do_commit() {
   local worktree="$1" state_dir="$2" task_summary="$3"
 
@@ -325,6 +386,15 @@ EOF
     return 1
   fi
 
+  local missing_files
+  if missing_files="$(verify_changed_files "$worktree" "$json_path")"; then
+    :
+  else
+    log_event "$state_dir" "CHANGED_FILES_MISMATCH: $missing_files"
+    fail_run "$state_dir" "CHANGED_FILES_MISMATCH" "verdict claimed changed_files not found in actual git diff: $missing_files"
+    return 1
+  fi
+
   if ! "$LIB_DIR/gate-runner.sh" run "$worktree" "$state_dir/gates-round-1" "01" >> "$state_dir/phase-events.log" 2>&1; then
     fail_run "$state_dir" "GATE_FAILED" "see gates-round-1/gate-01.log"
     return 1
@@ -426,6 +496,26 @@ EOF
   if [ "$all_pass" != "1" ]; then
     fail_run "$state_dir" "PARALLEL_FAILED" "one or more agents failed:
 $summary"
+    return 1
+  fi
+
+  local all_missing_files=""
+  i=0
+  for pair in "${pairs[@]}"; do
+    local role="implement-$((i+1))"
+    local result
+    result="$(cat "$parallel_dir/result-$role.txt" 2>/dev/null || echo "")"
+    local slice_json_path="${result##*|}"
+    local slice_missing
+    if ! slice_missing="$(verify_changed_files "$worktree" "$slice_json_path")"; then
+      all_missing_files="${all_missing_files}[$role] ${slice_missing}"
+    fi
+    i=$((i+1))
+  done
+
+  if [ -n "$all_missing_files" ]; then
+    log_event "$state_dir" "CHANGED_FILES_MISMATCH: $all_missing_files"
+    fail_run "$state_dir" "CHANGED_FILES_MISMATCH" "one or more slices claimed changed_files not found in actual git diff: $all_missing_files"
     return 1
   fi
 
@@ -542,6 +632,16 @@ EOF
       fail_run "$state_dir" "IMPL_$impl_verdict" "implement did not pass"
       return 1
     }
+
+    local impl_json_path="${impl_output##*|}"
+    local impl_missing_files
+    if impl_missing_files="$(verify_changed_files "$worktree" "$impl_json_path")"; then
+      :
+    else
+      log_event "$state_dir" "CHANGED_FILES_MISMATCH: $impl_missing_files"
+      fail_run "$state_dir" "CHANGED_FILES_MISMATCH" "implement verdict claimed changed_files not found in actual git diff: $impl_missing_files"
+      return 1
+    fi
 
     # (3) gate
     if ! "$LIB_DIR/gate-runner.sh" run "$worktree" "$state_dir/gates-round-$round" "0$round" >> "$state_dir/phase-events.log" 2>&1; then

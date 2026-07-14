@@ -155,11 +155,16 @@ call() {
       echo "FAIL:${failure_mode:-EXTRACT_FAILED}"
       return 1
     fi
-    json_text="$tag_verdict"
+    json_text="{\"verdict\": \"$tag_verdict\", \"summary\": \"\", \"findings\": [], \"changed_files\": [], \"tests_added_or_updated\": [], \"risks\": [], \"notes_for_reviewer\": \"\"}"
   fi
 
   local verdict
   verdict=$("$SKILL_LIB/verdict-extractor.sh" validate "$json_text")
+
+  if [ "$verdict" = "INVALID_OUTPUT" ]; then
+    echo "FAIL:INVALID_OUTPUT"
+    return 1
+  fi
 
   local json_path="$io_dir/agy-${role}.json"
   printf '%s' "$json_text" > "$json_path"

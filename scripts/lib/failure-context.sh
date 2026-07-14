@@ -10,6 +10,71 @@ LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(cd "$LIB_DIR/.." && pwd)"
 
 # ---------------------------------------------------------------------------
+# redactor — 민감정보 마스킹
+# ---------------------------------------------------------------------------
+# review critique: 페일러 컨텍스트가 Claude로 전송되기 전에
+# secret/credential이 제거 또는 마스킹되어야 한다. 다음을 마스킹한다:
+#   - OpenAI/Anthropic/MiniMax 스타일 API 키 (sk-..., sk-cp-...)
+#   - "Authorization: Bearer ..." 헤더
+#   - "ANTHROPIC_API_KEY=..." / "OPENAI_API_KEY=..." 환경변수 형식
+#   - .env 파일 내용
+#   - 원격 URL에 포함된 userinfo (https://user:token@host)
+#   - home 디렉터리 절대경로 (예: /Users/<user> → ~)
+#
+# 입력: stdin 또는 첫 번째 인자의 문자열
+# 출력: 마스킹된 문자열 (stdout), 마스킹된 줄 수는 stderr로 보고
+
+redactor() {
+  local input
+  if [ $# -gt 0 ]; then
+    input="$1"
+  else
+    input="$(cat)"
+  fi
+
+  # sed는 no-match 시 비정상 종료를 하므로 || true 로 강제
+  # 1) 환경변수 형식 키=value
+  input=$(printf '%s' "$input" | sed -E \
+    -e 's/(ANTHROPIC_API_KEY|OPENAI_API_KEY|OPENAI_AUTH_TOKEN|ANTHROPIC_AUTH_TOKEN|MINIMAX_API_KEY|MINI_MAX_API_KEY|GEMINI_API_KEY|CLAUDE_API_KEY)[ =:]+"?[A-Za-z0-9_\-]+"?/\1=[REDACTED]/gI' \
+    -e 's/("?(api[_-]?key|api[_-]?secret|access[_-]?token|secret[_-]?key|auth[_-]?token)"?[[:space:]]*[:=][[:space:]]*)"?[A-Za-z0-9_\-]{12,}"?/\1"[REDACTED]"/gI' \
+    2>/dev/null
+  ) || true
+
+  # 2) OpenAI sk-..., Anthropic sk-ant-..., MiniMax sk-cp-... 키
+  input=$(printf '%s' "$input" | sed -E \
+    's/\bsk-(cp-|ant-)?[A-Za-z0-9_\-]{20,}\b/sk-\1[REDACTED]/g' \
+    2>/dev/null
+  ) || true
+
+  # 3) Bearer 헤더
+  input=$(printf '%s' "$input" | sed -E \
+    's/(Bearer[[:space:]]+)[A-Za-z0-9_\-\.]{12,}/\1[REDACTED]/gI' \
+    2>/dev/null
+  ) || true
+
+  # 4) JWT (eyJ... 형태, 길이로 휴리스틱)
+  # macOS sed는 \b 미지원 — POSIX [[:<:]] 사용
+  input=$(printf '%s' "$input" | sed -E \
+    's|[[:<:]]eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{5,}\.[A-Za-z0-9_\-]{10,}[[:>:]]|[REDACTED-JWT]|g' \
+    2>/dev/null
+  ) || true
+
+  # 5) URL userinfo (https://user:token@host)
+  # macOS/BSD sed는 \s를 지원하지 않으므로 POSIX [:space:] 사용
+  input=$(printf '%s' "$input" | sed -E \
+    's|(https?://)[^/@:[:space:]]+:[^/@:[:space:]]+@|\1[REDACTED]@|g' \
+    2>/dev/null
+  ) || true
+
+  # 6) 홈 디렉터리 절대경로 → ~
+  if [ -n "${HOME:-}" ]; then
+    input=$(printf '%s' "$input" | sed -E "s|${HOME}|~|g" 2>/dev/null) || true
+  fi
+
+  printf '%s\n' "$input"
+}
+
+# ---------------------------------------------------------------------------
 # capture_context
 # ---------------------------------------------------------------------------
 # 인자: state_dir
@@ -65,24 +130,24 @@ capture_context() {
   cat <<YAMLEOF
 ---
 failure_context:
-  run_id: $run_id
-  branch: $branch
-  worktree: $worktree
+  run_id: $(printf '%s' "$run_id" | redactor)
+  branch: $(printf '%s' "$branch" | redactor)
+  worktree: $(printf '%s' "$worktree" | redactor)
   failure_code: $failure_code
   failure_message: |
-$(echo "$failure_message" | sed 's/^/    /')
+$(printf '%s' "$failure_message" | redactor | sed 's/^/    /')
 
 phase_events: |
-$(echo "$phase_events" | sed 's/^/    /')
+$(printf '%s' "$phase_events" | redactor | sed 's/^/    /')
 
 adapter_log_tail: |
-$(echo "$adapter_log" | sed 's/^/    /')
+$(printf '%s' "$adapter_log" | redactor | sed 's/^/    /')
 
 git_diff: |
-$(echo "$git_diff" | sed 's/^/    /')
+$(printf '%s' "$git_diff" | redactor | sed 's/^/    /')
 
 recent_commits: |
-$(echo "$recent_commits" | sed 's/^/    /')
+$(printf '%s' "$recent_commits" | redactor | sed 's/^/    /')
 
 analyzer_instructions: |
   Analyze the failure, identify root cause, propose minimal fix.

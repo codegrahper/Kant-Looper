@@ -29,17 +29,78 @@ guard_main_branch() {
 }
 
 # ---------------------------------------------------------------------------
-# 가드: 허용된 경로만 변경
+# 가드: 허용된 경로만 변경 — symlink / 상위참조 / 절대경로 모두 차단
 # ---------------------------------------------------------------------------
 
 guard_path_allowed() {
   local file="$1"
+
+  # 1) 절대경로 + .. 포함 + SKILL_ROOT 외부 거부
   case "$file" in
-    "$SKILL_DIR"/scripts/*) return 0 ;;
-    "$SKILL_DIR"/agents/*) return 0 ;;
-    "$SKILL_DIR"/references/*.md) return 0 ;;
-    *) echo "ERROR: meta-agent이 변경 시도한 경로가 허용 안 됨: $file" >&2; return 1 ;;
+    "$SKILL_DIR"/scripts/*) ;;
+    "$SKILL_DIR"/agents/*) ;;
+    "$SKILL_DIR"/references/*.md) ;;
+    *)
+      echo "ERROR: meta-agent 변경 시도가 허용 영역 밖: $file" >&2
+      return 1
+      ;;
   esac
+
+  # 2) 상위참조 (..)로 SKILL_ROOT 탈출 시도 거부
+  local rel="${file#$SKILL_DIR/}"
+  if echo "$rel" | grep -q "/\.\.\|^\.\.\|/\.\./"; then
+    echo "ERROR: 경로에 상위참조 (..) 발견: $file" >&2
+    return 1
+  fi
+
+  # 3) symlink로 영역 탈출 차단
+  if [ -L "$file" ]; then
+    local resolved
+    resolved="$(cd "$(dirname "$file")" && readlink "$(basename "$file")" || echo "")"
+    # SKILL_ROOT/ 접두 검사 후 거부
+    case "$resolved" in
+      "$SKILL_DIR"/*|"$SKILL_DIR") ;;
+      *)
+        echo "ERROR: symlink가 SKILL_ROOT 외부로 연결됨: $file -> $resolved" >&2
+        return 1
+        ;;
+    esac
+  fi
+
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# 가드: 재진입 방지 (idempotency marker)
+# ---------------------------------------------------------------------------
+# review critique: 메타 에이전트 루프가 실패 → 재분석 → 재시도 무한루프 방지.
+# 동일 JSON proposal이 이미 적용되었거나 진행 중이면 즉시 거부한다.
+# marker는 영구적으로 남는다 (run 단위 유일성). unlock은 하지 않는다.
+
+guard_no_reentry() {
+  local json_file="$1"
+  local marker="${json_file}.applied"
+
+  if [ -e "$marker" ]; then
+    echo "FATAL: 동일 fix 제안이 이미 적용됨 ($marker) — 재진입 차단" >&2
+    return 1
+  fi
+
+  # partial commit 감지 (.git/index에 staged 가 있는데 fix-commit은 안 된 상태)
+  if [ -n "$(cd "$SKILL_ROOT" && git diff --cached --name-only 2>/dev/null || true)" ]; then
+    echo "FATAL: staged 변경이 남아 있어 안전을 위해 재시도 차단. 수동 정리 후 다시 시도." >&2
+    return 1
+  fi
+
+  return 0
+}
+
+mark_applied() {
+  local json_file="$1"
+  local marker="${json_file}.applied"
+  # 메타 정보 기록 (SHA + timestamp) — 운영 디버깅 용도
+  date -u +"%Y-%m-%dT%H:%M:%SZ" > "$marker"
+  cd "$SKILL_ROOT" && git rev-parse HEAD >> "$marker" 2>/dev/null || true
 }
 
 # ---------------------------------------------------------------------------
@@ -59,6 +120,7 @@ apply_fix() {
   cd "$SKILL_ROOT"
 
   guard_main_branch || return 1
+  guard_no_reentry "$json_file" || return 1
 
   # Python으로 JSON 파싱
   local branch_name
@@ -141,6 +203,9 @@ print('patched $file')
       return 1
     }
   fi
+
+  # idempotency marker — 동일 json_file로 재시도 차단
+  mark_applied "$json_file"
 
   local commit_sha
   commit_sha="$(git rev-parse HEAD)"

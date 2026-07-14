@@ -86,12 +86,28 @@ guard_path_in_repo() {
     *..*) echo "ERROR: 경로에 상위참조 (..) 발견: $file" >&2; return 1 ;;
   esac
 
-  # 2) realpath -m 으로 canonical path 계산 (BSD/GNU 호환)
+  # 2) canonical path 계산 (BSD/GNU 호환)
   local canonical
-  if command -v realpath >/dev/null 2>&1; then
-    canonical="$(realpath -m "$file" 2>/dev/null || echo "$file")"
+  # GNU realpath는 -m 옵션이 있지만 BSD realpath는 없다 — POSIX 호환을 위해
+  # cd + pwd -P + basename 조합으로 명시적으로 만든다
+  local target_dir target_base
+  if [ -d "$file" ]; then
+    target_dir="$(cd "$file" && pwd -P 2>/dev/null)" || target_dir="$file"
+    canonical="$target_dir"
+  elif [ -e "$file" ] || [ -L "$file" ]; then
+    target_dir="$(cd "$(dirname "$file")" && pwd -P 2>/dev/null)" || target_dir="$(dirname "$file")"
+    target_base="$(basename "$file")"
+    canonical="$target_dir/$target_base"
   else
-    canonical="$(cd "$(dirname "$file")" && pwd -P)/$(basename "$file")"
+    # 경로가 존재하지 않으면 (e.g., 신규 생성 파일) parent + basename만 해석
+    target_dir="$(cd "$(dirname "$file")" 2>/dev/null && pwd -P)" || target_dir="$(dirname "$file")"
+    canonical="$target_dir/$(basename "$file")"
+  fi
+  # GNU coreutils realpath가 있으면 폴백 (BSD missing 시 위 코드가 사용됨)
+  if command -v realpath >/dev/null 2>&1; then
+    local alt
+    alt="$(realpath "$file" 2>/dev/null || true)"
+    [ -n "$alt" ] && canonical="$alt"
   fi
 
   # 3) 절대경로만 허용 (상대경로는 거부)

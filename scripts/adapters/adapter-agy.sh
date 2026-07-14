@@ -148,7 +148,7 @@ call() {
   # JSON 추출 실패 시 verdict-tag 폴백
   if [ -z "$json_text" ]; then
     local tag_verdict
-    tag_verdict=$("$SKILL_LIB/verdict-extractor.sh" extract "$response_file" 2>/dev/null || true)
+    tag_verdict=$("$SKILL_LIB/verdict-extractor.sh" extract-verdict-tag "$response_file" 2>/dev/null || true)
     if [ -z "$tag_verdict" ]; then
       local failure_mode
       failure_mode=$("$SKILL_LIB/fallback-dispatcher.sh" classify "agy" "$rc" "$(cat "$log_file" 2>/dev/null)")

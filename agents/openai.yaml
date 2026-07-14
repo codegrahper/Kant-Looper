@@ -50,7 +50,7 @@ agents:
 
   - name: agy
     role: UI/멀티모달 (Antigravity/Gemini)
-    models: [gemini-3.5-flash, gemini-3.1-pro-preview]
+    models: [gemini-3.5-flash]
 
   - name: claude
     role: 최종 폴백 + self-call

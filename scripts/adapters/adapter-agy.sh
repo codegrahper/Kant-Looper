@@ -32,9 +32,8 @@ version() {
 normalize_model_for_agy() {
   local model="$1"
   case "$model" in
-    gemini-3.5-flash)  echo "Gemini 3.5 Flash (Medium)" ;;
-    gemini-3.1-pro)    echo "Gemini 3.1 Pro (Low)" ;;
-    *)                  echo "$model" ;;
+    gemini-3.5-flash) echo "Gemini 3.5 Flash (Medium)" ;;
+    *)                 echo "$model" ;;
   esac
 }
 
@@ -43,6 +42,10 @@ normalize_model_for_agy() {
 # ---------------------------------------------------------------------------
 
 call() {
+  if [ $# -lt 4 ]; then
+    echo "ERROR: call requires 4 arguments: role prompt_file worktree model" >&2
+    return 1
+  fi
   local role="$1" prompt_file="$2" worktree="$3" model="$4"
 
   if [ ! -f "$prompt_file" ]; then

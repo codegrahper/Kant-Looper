@@ -19,6 +19,7 @@ TESTS=(
   "scripts/tests/test-fix-apply-guards.sh"
   "scripts/tests/test-meta-agent-loop.sh"
   "scripts/tests/test-timeout-runner-cwd.sh"
+  "scripts/tests/test-redactor.sh"
   "scripts/tests/test-fix-apply-e2e.sh"
 )
 
@@ -29,6 +30,7 @@ LABELS=(
   "PR B: fix-apply guards"
   "PR B: meta-agent 모듈"
   "timeout-runner cwd"
+  "PR B: redactor (secret 마스킹)"
   "fix-apply e2e (git 통합)"
 )
 

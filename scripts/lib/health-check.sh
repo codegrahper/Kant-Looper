@@ -53,9 +53,17 @@ health_check_tool() {
     claude)
       command -v claude >/dev/null 2>&1 || return 1
       claude --version >/dev/null 2>&1 || return 1
-      # 인증 확인
-      [ -f "${HOME}/.claude/credentials.json" ] || [ -n "${ANTHROPIC_API_KEY:-}" ] || return 1
-      return 0
+      # 인증 확인: credentials.json(구 griff) 또는 ANTHROPIC_API_KEY(env) 또는 구독계정(claude auth status)
+      if [ -f "${HOME}/.claude/credentials.json" ] || [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+        return 0
+      fi
+      # 구독계정 체크 (loggedIn: true + firstParty 또는 apiKey 인증)
+      local claude_auth_json
+      claude_auth_json=$(claude auth status 2>/dev/null || echo '{"loggedIn":false}')
+      if python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('loggedIn') else 1)" <<< "$claude_auth_json" 2>/dev/null; then
+        return 0
+      fi
+      return 1
       ;;
 
     *)

@@ -29,6 +29,34 @@ version() {
 }
 
 # ---------------------------------------------------------------------------
+# 자동 모델 감지: MiniMax-M3가 요청되었을 때 실제 사용 가능한 모델로 교체
+# ---------------------------------------------------------------------------
+
+resolve_claude_model() {
+  local requested_model="$1"
+  # MiniMax-M3는 항상 fallback chain의 마지막이므로 이 함수가 호출됨
+  # 구독계정: claude auth status → loggedIn=true → claude-sonnet-5
+  # API 키: ANTHROPIC_API_KEY 설정 → MiniMax-M3
+  if [ "$requested_model" = "MiniMax-M3" ]; then
+    if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+      echo "MiniMax-M3"
+    else
+      # 구독계정 체크
+      local auth_json
+      auth_json=$(claude auth status 2>/dev/null || echo '{"loggedIn":false}')
+      if python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('loggedIn') else 1)" <<< "$auth_json" 2>/dev/null; then
+        # Pro 구독은 claude-sonnet-5 사용 가능
+        echo "claude-sonnet-5"
+      else
+        echo "MiniMax-M3"
+      fi
+    fi
+  else
+    echo "$requested_model"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # call
 # ---------------------------------------------------------------------------
 
@@ -44,6 +72,8 @@ call() {
     echo "ERROR: claude unavailable" >&2
     return 201
   fi
+
+  model="$(resolve_claude_model "$model")"
 
   local io_dir
   io_dir="$(get_io_dir "$worktree")"

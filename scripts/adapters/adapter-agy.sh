@@ -83,7 +83,7 @@ call() {
       agy_mode="plan"
       skip_permissions=0
       ;;
-    implement|repair)
+    implement|implement-*|repair|repair-*)
       sandbox_mode="workspace-write"
       agy_mode="accept-edits"
       skip_permissions=1
@@ -131,6 +131,14 @@ call() {
     rc=0
   else
     rc=$?
+  fi
+
+  # nonzero exit code이면 즉시 FAIL 처리
+  if [ "$rc" -ne 0 ]; then
+    local failure_mode
+    failure_mode=$("$SKILL_LIB/fallback-dispatcher.sh" classify "agy" "$rc" "$(cat "$log_file" 2>/dev/null)")
+    echo "FAIL:${failure_mode:-INFRA_ERROR}"
+    return 1
   fi
 
   # 응답 처리 — agy는 단순 stdout이라 verdict-tag 또는 JSON 추출

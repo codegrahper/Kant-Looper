@@ -25,7 +25,7 @@ declare -a KANT_FALLBACK_CHAINS_LINEAR=(
   "codex|gpt-5.6-luna|claude|MiniMax-M3"
   "grok|grok-4.5|opencode|glm-5.2|codex|gpt-5.6-terra|agy|gemini-3.5-flash|claude|MiniMax-M3"
   "opencode|glm-5.2|codex|gpt-5.6-terra|agy|gemini-3.5-flash|grok|grok-4.5|claude|MiniMax-M3"
-  "agy|gemini-3.5-flash|agy|gemini-3.1-pro-preview|opencode|glm-5.2|claude|MiniMax-M3"
+  "agy|gemini-3.5-flash|opencode|glm-5.2|claude|MiniMax-M3"
   "claude|MiniMax-M3|claude|MiniMax-M3"   # claude는 자기 자신이 최종
 )
 

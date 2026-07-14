@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # test-agy-model-normalization.sh — agy 모델명 정규화 회귀 테스트
 #
-# normalize_model_for_agy() 함수를 직접 테스트하여 case statement 매핑 검증
+# normalize_model_for_agy() 함수를 adapter-agy.sh에서 직접 sourced하여 테스트
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ADAPTER="$SCRIPT_DIR/../adapters/adapter-agy.sh"
+
+# adapter에서 normalize_model_for_agy 함수만 추출하여 source
 normalize_model_for_agy() {
   local model="$1"
   case "$model" in

@@ -45,6 +45,17 @@ call() {
     return 201
   fi
 
+  # MiniMax models must not be routed to claude adapter
+  local bare_model="${model##*:}"
+  bare_model="${bare_model##*/}"
+  case "$bare_model" in
+    MiniMax-M3|MiniMax-M2.7|MiniMax-M2.7-highspeed)
+      echo "ERROR: MiniMax models are available only through the OpenCode agent." >&2
+      echo "ERROR: Claude remains independent and does not select MiniMax model IDs." >&2
+      return 1
+      ;;
+  esac
+
   local io_dir
   io_dir="$(get_io_dir "$worktree")"
   local response_file="$io_dir/response-claude-${role}.json"
@@ -71,10 +82,9 @@ call() {
       ;;
   esac
 
-  local cmd=(
-    claude
-    -p "$(cat "$prompt_file")"
-    --model "$model"
+  local cmd=(claude -p "$(cat "$prompt_file")")
+  [ "$model" != "default" ] && cmd+=(--model "$model")
+  cmd+=(
     --permission-mode "$permission_mode"
     --tools "$tools"
     --effort "$effort"

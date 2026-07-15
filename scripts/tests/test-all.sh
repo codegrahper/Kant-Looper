@@ -13,15 +13,16 @@ SKILL_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # 실행 대상 정의 (출력 순서대로)
 TESTS=(
-  "scripts/lib/safety-check.sh self-test"
-  "scripts/tests/test-quick-mode-fallback.sh"
-  "scripts/tests/test-fix-apply-redesign.sh"
-  "scripts/tests/test-fix-apply-guards.sh"
-  "scripts/tests/test-meta-agent-loop.sh"
-  "scripts/tests/test-meta-aware-routing.sh"
-  "scripts/tests/test-timeout-runner-cwd.sh"
-  "scripts/tests/test-redactor.sh"
-  "scripts/tests/test-fix-apply-e2e.sh"
+  "bash scripts/lib/safety-check.sh self-test"
+  "bash scripts/tests/test-quick-mode-fallback.sh"
+  "bash scripts/tests/test-fix-apply-redesign.sh"
+  "bash scripts/tests/test-fix-apply-guards.sh"
+  "bash scripts/tests/test-meta-agent-loop.sh"
+  "bash scripts/tests/test-meta-aware-routing.sh"
+  "bash scripts/tests/test-minimax-routing.sh"
+  "bash scripts/tests/test-timeout-runner-cwd.sh"
+  "bash scripts/tests/test-redactor.sh"
+  "bash scripts/tests/test-fix-apply-e2e.sh"
 )
 
 LABELS=(
@@ -31,6 +32,7 @@ LABELS=(
   "PR B: fix-apply guards"
   "PR B: meta-agent 모듈"
   "meta-aware-routing (메타 에이전트 판단 기반 라우팅)"
+  "minimax-routing"
   "timeout-runner cwd"
   "PR B: redactor (secret 마스킹)"
   "fix-apply e2e (git 통합)"

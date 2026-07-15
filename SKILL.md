@@ -106,10 +106,10 @@ allowed-tools:
 
 다음 도구 중 하나를 선택한다:
 - `codex` (OpenAI) — GPT-5.6 모델군
-- `opencode` (GLM/Z.AI) — GLM 모델군
+- `opencode` (GLM/Z.AI, MiniMax) — GLM 및 MiniMax 모델군
 - `grok` (xAI) — Grok 모델군
 - `agy` (Google Antigravity) — Gemini 모델군
-- `claude` (Anthropic) — MiniMax 모델군
+- `claude` (Anthropic) — Claude 기본 모델군
 
 2. **모델 ID 선택**
 
@@ -123,6 +123,9 @@ allowed-tools:
 **OpenCode:**
 - `opencode:glm-5.2` (1M 컨텍스트 - 대형 저장소, 장시간 리팩터링)
 - `opencode:glm-4.7` (실용형 - 일상 개발, 비용·품질 균형)
+- `opencode:MiniMax-M3` (1M 컨텍스트, 장기 에이전트)
+- `opencode:MiniMax-M2.7` (일반 코딩, 비용 균형)
+- `opencode:MiniMax-M2.7-highspeed` (낮은 지연)
 
 **Grok:**
 - `grok:grok-4.5` (터미널, Rust/C/C++, 풀스택, 빠른 도구 루프)
@@ -135,9 +138,19 @@ allowed-tools:
 - `agy:gemini-3.1-flash-lite` (대량 저비용 서브태스크)
 
 **Claude:**
-- `claude:MiniMax-M3` (1M 컨텍스트, 장기 에이전트)
-- `claude:MiniMax-M2.7` (일반 코딩, 비용 균형)
-- `claude:MiniMax-M2.7-highspeed` (낮은 지연)
+- Claude uses its own default models
+- Claude does NOT select MiniMax model IDs
+
+> **NOTE:** MiniMax models are available ONLY through the OpenCode agent.
+> Claude remains independent and does NOT select MiniMax model IDs.
+
+**MiniMax via OpenCode usage examples:**
+
+```bash
+kant-loop.sh run TASK.md --quick --agent opencode --model MiniMax-M3
+kant-loop.sh run TASK.md --quick --agent opencode --model MiniMax-M2.7
+kant-loop.sh run TASK.md --quick --agent opencode --model MiniMax-M2.7-highspeed
+```
 
 모델 선택 후 선택된 내용을 확인하고 진행한다.
 

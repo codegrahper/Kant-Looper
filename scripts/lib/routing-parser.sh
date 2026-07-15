@@ -63,7 +63,7 @@ parse_routing_guide() {
   primary_glm52="$(grep -E 'glm-5\.2[^.]' "$ROUTING_GUIDE" | head -1 | grep -oE 'glm-5\.2' || echo 'glm-5.2')"
   primary_grok45="$(grep -E 'grok-4\.5' "$ROUTING_GUIDE" | head -1 | grep -oE 'grok-4\.5' || echo 'grok-4.5')"
   primary_gemini35flash="$(grep -E 'gemini-3\.5-flash' "$ROUTING_GUIDE" | head -1 | grep -oE 'gemini-3\.5-flash' || echo 'gemini-3.5-flash')"
-  model_kant_minimax="MiniMax-M3"
+  model_kant_minimax="default"
 
   # 캐시 파일 생성
   cat > "$GUIDE_CACHE" <<EOF
@@ -75,7 +75,7 @@ KANT_PRIMARY_SOL="$primary_sol"
 KANT_PRIMARY_GLM52="$primary_glm52"
 KANT_PRIMARY_GROK45="$primary_grok45"
 KANT_PRIMARY_GEMINI35FLASH="$primary_gemini35flash"
-KANT_CLAUDE_MODEL="$model_kant_minimax"
+KANT_CLAUDE_MODEL="default"
 
 KANT_ROUTE_TINY_PRIMARY="codex:$primary_luna"
 KANT_ROUTE_STANDARD_PRIMARY="codex:$primary_terra"
@@ -142,15 +142,41 @@ _get_route_candidate() {
 # tool + model 유효성 검증
 # ---------------------------------------------------------------------------
 
+is_official_minimax_model() {
+  case "$1" in
+    MiniMax-M3|MiniMax-M2.7|MiniMax-M2.7-highspeed)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+model_basename() {
+  local value="$1"
+  value="${value##*:}"
+  value="${value##*/}"
+  printf '%s\n' "$value"
+}
+
 is_model_valid() {
   local tool="$1" model="$2"
-  local bare_model="${model##*:}"
+  local bare_model
+  bare_model="$(model_basename "$model")"
   case "$tool" in
     codex)
       echo "$bare_model" | grep -qE '^gpt-5\.' && return 0
       ;;
     opencode)
-      echo "$bare_model" | grep -qE '^glm-' && return 0
+      case "$bare_model" in
+        glm-5.2|glm-4.7)
+          return 0
+          ;;
+      esac
+      if is_official_minimax_model "$bare_model"; then
+        return 0
+      fi
       ;;
     grok)
       echo "$bare_model" | grep -qE '^grok-' && return 0
@@ -159,7 +185,7 @@ is_model_valid() {
       echo "$bare_model" | grep -qE '^gemini-' && return 0
       ;;
     claude)
-      echo "$bare_model" | grep -qE '^MiniMax-' && return 0
+      [ "$bare_model" = "default" ] && return 0
       ;;
   esac
   return 1
@@ -464,6 +490,26 @@ if [ "${1:-}" = "is-available" ]; then
     exit 1
   fi
 fi
+
+# ---------------------------------------------------------------------------
+# CLI: validate-model <tool> <model>
+# ---------------------------------------------------------------------------
+
+case "${1:-}" in
+  validate-model)
+    shift
+    tool="$1"; model="$2"
+    if [ -z "$tool" ] || [ -z "$model" ]; then
+      echo "Usage: routing-parser.sh validate-model <tool> <model>" >&2
+      exit 1
+    fi
+    if is_model_valid "$tool" "$model"; then
+      exit 0
+    else
+      exit 1
+    fi
+    ;;
+esac
 
 # 직접 실행 시: 가이드 파싱 후 핵심 변수 dump
 if [ "${1:-}" = "dump" ] || [ "${1:-}" = "" ]; then

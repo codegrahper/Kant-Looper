@@ -37,6 +37,21 @@ version() {
 }
 
 # ---------------------------------------------------------------------------
+# MiniMax model detection (bash 3.2 compatible)
+# ---------------------------------------------------------------------------
+
+is_minimax_model() {
+  case "$1" in
+    MiniMax-M3|MiniMax-M2.7|MiniMax-M2.7-highspeed)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # call
 # ---------------------------------------------------------------------------
 
@@ -67,6 +82,7 @@ call() {
   local variant="${KANT_OPENCODE_VARIANT:-high}"
 
   local glm_provider="${KANT_OPENCODE_GLM_PROVIDER:-opencode-go}"
+  local minimax_provider="${KANT_MINIMAX_OPENCODE_PROVIDER:-minimax}"
   local normalized_model="$model"
   if ! printf '%s' "$model" | grep -q '/'; then
     case "$model" in
@@ -77,6 +93,10 @@ call() {
       glm-5.*|glm-4.*)
         # glm-5.x와 그 외 glm-4.x는 opencode-go 프리픽스 사용
         normalized_model="${glm_provider}/${model}"
+        ;;
+      MiniMax-M3|MiniMax-M2.7|MiniMax-M2.7-highspeed)
+        # MiniMax models use minimax provider prefix
+        normalized_model="${minimax_provider}/${model}"
         ;;
       *)
         # 알 수 없는 bare 이름은 로그만 남기고 그대로 시도 (다른 프로바이더일 수 있음)

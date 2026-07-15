@@ -90,7 +90,10 @@ fi
 # ============================================================
 echo "[S4] Python -c로 JSON 보간 안 됨"
 
-if grep -Eqn 'python3?[[:space:]]-c[[:space:]]+".*\$[a-z]' "$FIX_APPLY" 2>/dev/null; then
+# Shell 변수 보간 검출: python -c "..." STRING 안에서 $var 또는 ${var} 사용
+# python3 -c "import sys; print(sys.argv[1])" "$file" 형태는 허용 (인자 전달, 보간 아님)
+# grep: -c 다음의 "..." 안에 $이면서 그 뒤가 영문자 또는 { 인 경우
+if grep -Eqn 'python3?[[:space:]]-c[[:space:]]+"[^"]*\$[a-zA-Z{][^"]*"' "$FIX_APPLY" 2>/dev/null; then
   echo "  FAIL: 'python3 -c \"... \$변수...\"' 인라인 보간 존재"
   ((FAIL++))
 else
@@ -112,36 +115,53 @@ fi
 echo "[S5] claude \${cmd[@]} 중복 호출 없음 (in failure-analyzer.sh)"
 
 FAIL_ANALYZER="$SKILL_LIB/failure-analyzer.sh"
-if [ -f "$FAIL_ANALYZER" ]; then
-  # cmd 배열의 첫 원소가 claude이면 안 됨
+if [ ! -f "$FAIL_ANALYZER" ]; then
+  echo "  SKIP: failure-analyzer.sh not found"
+else
+  # cmd 배열 블록 추출 (주석 제외)
   cmd_block="$(awk '
-    /cmd=\(/ {
+    /[[:space:]]+cmd=\(/ {
       in_block = 1
     }
     in_block {
       print
-      if (/\)/) exit
+      if (/^[[:space:]]*\)/) exit
     }
-  ' "$FAIL_ANALYZER")"
+  ' "$FAIL_ANALYZER" | grep -vE '^[[:space:]]*#')"
 
-  if echo "$cmd_block" | grep -Eq 'claude'; then
-    echo "  FAIL: cmd 배열의 첫 원소가 'claude' → 중복 호출 가능"
+  if [ -z "$cmd_block" ]; then
+    echo "  FAIL: unable to locate cmd array in failure-analyzer.sh"
     ((FAIL++))
   else
-    echo "  PASS: cmd 배열이 claude로 시작하지 않음"
-    ((PASS++))
-  fi
+    # 조건 1: cmd 배열의 첫 실행 원소가 claude여야 함 (올바른 production 동작)
+    first_cmd="$(printf '%s\n' "$cmd_block" | tail -n +2 | head -1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/^"//; s/"$//')"
+    if [ "$first_cmd" = "claude" ]; then
+      echo "  PASS: cmd 배열 첫 원소는 claude (올바른 production 동작)"
+      ((PASS++))
+    else
+      echo "  FAIL: cmd 배열 첫 원소가 'claude'가 아님: '$first_cmd'"
+      ((FAIL++))
+    fi
 
-  # 호출 라인에서도 'claude ${cmd[@]}' 형태면 중복
-  if grep -Eqn 'claude[[:space:]]+"?\$\{?cmd' "$FAIL_ANALYZER" 2>/dev/null; then
-    echo "  FAIL: 호출 라인 'claude \${cmd[@]}' — 중복 claude 호출"
-    ((FAIL++))
-  else
-    echo "  PASS: 호출 라인에서 claude 중복 없음"
-    ((PASS++))
+    # 조건 2: "${cmd[@]}" 호출이 정확히 한 번 (주석 제외)
+    invocation_count="$(grep -vE '^[[:space:]]*#' "$FAIL_ANALYZER" 2>/dev/null | grep -cE '"\$\{cmd\[@\]\}"' || echo "0")"
+    if [ "$invocation_count" -eq 1 ]; then
+      echo "  PASS: \${cmd[@]} 호출 정확히 한 번"
+      ((PASS++))
+    else
+      echo "  FAIL: \${cmd[@]} 호출 횟수: $invocation_count (예상: 1)"
+      ((FAIL++))
+    fi
+
+    # 조건 3: claude 중복 prefix 부재 (claude "${cmd[@]}" 형태不允许)
+    if grep -vE '^[[:space:]]*#' "$FAIL_ANALYZER" 2>/dev/null | grep -qE 'claude[[:space:]]+"\$\{cmd\[@\]\}"'; then
+      echo "  FAIL: claude \${cmd[@]} 중복 호출 존재"
+      ((FAIL++))
+    else
+      echo "  PASS: claude \${cmd[@]} 중복 prefix 없음"
+      ((PASS++))
+    fi
   fi
-else
-  echo "  SKIP: failure-analyzer.sh 없음"
 fi
 
 # ============================================================

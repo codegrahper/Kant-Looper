@@ -19,15 +19,19 @@ FALLBACK_LOG="${KANT_FALLBACK_LOG:-${KANT_STATE_DIR:-$HOME/.claude/state/kant-lo
 # 주의: 어댑터 이름(tool)은 실제 스크립트 이름과 일치해야 함 (예: adapter-opencode.sh).
 #       모델은 같은 어댑터 내에서 다르게 시도 가능 (예: codex+gpt-5.6-luna).
 
+# Fallback chain notes:
+# - claude:default means "claude with its own default model" (no --model flag passed to Claude CLI)
+# - MiniMax models are ONLY available through opencode agent, NOT through claude
+# - Claude final fallback uses "default" sentinel, NOT MiniMax model IDs
 declare -a KANT_FALLBACK_CHAINS_LINEAR=(
-  "codex|gpt-5.6-sol|codex|gpt-5.6-terra|opencode|glm-5.2|agy|gemini-3.5-flash|grok|grok-4.5|claude|MiniMax-M3"
-  "codex|gpt-5.6-terra|codex|gpt-5.6-luna|opencode|glm-5.2|agy|gemini-3.5-flash|claude|MiniMax-M3"
-  "codex|gpt-5.6-luna|claude|MiniMax-M3"
-  "grok|grok-4.5|opencode|glm-5.2|codex|gpt-5.6-terra|agy|gemini-3.5-flash|claude|MiniMax-M3"
-  "opencode|glm-5.2|opencode|glm-4.7|codex|gpt-5.6-terra|agy|gemini-3.5-flash|grok|grok-4.5|claude|MiniMax-M3"
-  "opencode|glm-4.7|codex|gpt-5.6-terra|agy|gemini-3.5-flash|grok|grok-4.5|claude|MiniMax-M3"
-  "agy|gemini-3.5-flash|agy|gemini-3.1-pro-preview|opencode|glm-5.2|claude|MiniMax-M3"
-  "claude|MiniMax-M3|claude|MiniMax-M3"   # claude는 자기 자신이 최종
+  "codex|gpt-5.6-sol|codex|gpt-5.6-terra|opencode|glm-5.2|agy|gemini-3.5-flash|grok|grok-4.5|claude|default"
+  "codex|gpt-5.6-terra|codex|gpt-5.6-luna|opencode|glm-5.2|agy|gemini-3.5-flash|claude|default"
+  "codex|gpt-5.6-luna|claude|default"
+  "grok|grok-4.5|opencode|glm-5.2|codex|gpt-5.6-terra|agy|gemini-3.5-flash|claude|default"
+  "opencode|glm-5.2|opencode|glm-4.7|codex|gpt-5.6-terra|agy|gemini-3.5-flash|grok|grok-4.5|claude|default"
+  "opencode|glm-4.7|codex|gpt-5.6-terra|agy|gemini-3.5-flash|grok|grok-4.5|claude|default"
+  "agy|gemini-3.5-flash|agy|gemini-3.1-pro-preview|opencode|glm-5.2|claude|default"
+  "claude|default|claude|default"
 )
 
 # flat key-value로 변환: get_fallback_chain tool model → next tools/models (콤마 구분 "tool:model" 형식)
@@ -107,7 +111,7 @@ do_fallback() {
   local chain
   chain="$(get_fallback_chain "$failed_tool" "$failed_model")"
   if [ -z "$chain" ]; then
-    chain="claude:MiniMax-M3"
+    chain="claude:default"
   fi
 
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] fallback: $failed_tool:$failed_model ($failure_mode) → chain=$chain" >> "$FALLBACK_LOG"

@@ -78,6 +78,7 @@ PROMPTEOF
   # --output-format json 으로 메타 에이전트 호출
   # security: 배열에 claude를 넣지 않고, 단일 "${cmd[@]}" 로 실행 (중복 호출 방지)
   local cmd=(
+    claude
     -p "$(cat "$analysis_prompt_file")"
     --model "$claude_model"
     --permission-mode "$claude_perm_mode"

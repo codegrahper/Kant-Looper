@@ -306,9 +306,9 @@ classify_task_intent() {
   task_text="$(cat "$task_file" 2>/dev/null || true)"
   task_lc="$(printf '%s' "$task_text" | tr '[:upper:]' '[:lower:]')"
 
-  if printf '%s' "$task_lc" | grep -qE 'ui |component|screen|stitch|modal|drawer|tailwind|css|frontend|접근|사용자 인터페이스'; then
+  if printf '%s' "$task_lc" | grep -qE 'ui |component|screen|stitch|modal|drawer|tailwind|css|frontend|접근성|a11y|accessibility|사용자 인터페이스'; then
     echo "ui"
-  elif printf '%s' "$task_lc" | grep -qE '리뷰|검증|감사|review|verify|audit|inspect|점검|확인해'; then
+  elif printf '%s' "$task_lc" | grep -qE '리뷰|검증|감사|review|verify|audit|inspect|점검'; then
     echo "review"
   elif printf '%s' "$task_lc" | grep -qE '리팩터|마이그레이션|대규모|cleanup|restructure|refactor|migrate|rewrite'; then
     echo "refactor"
@@ -333,11 +333,11 @@ estimate_complexity() {
   task_text="$(cat "$task_file" 2>/dev/null || true)"
   task_lc="$(printf '%s' "$task_text" | tr '[:upper:]' '[:lower:]')"
 
-  if printf '%s' "$task_lc" | grep -qE '1m|huge|large repo|entire codebase|대형 저장소|전체 코드베이스|장기|다중 시스템|arch|설계 변경'; then
+  if printf '%s' "$task_lc" | grep -qE '1m[-[:space:]]*(context|컨텍스트)|huge|large repo|large repository|entire codebase|대형 저장소|전체 코드베이스|장기|다중 시스템|architecture|architectural|아키텍처|설계 변경'; then
     echo "T4"
-  elif printf '%s' "$task_lc" | grep -qE '전체|all |across|repository|저장소 전체|리팩터|마이그레이션|restructure|migrate'; then
+  elif printf '%s' "$task_lc" | grep -qE '전체[[:space:]]+(저장소|코드베이스)|저장소[[:space:]]+전체|(entire|whole)[[:space:]]+(repository|repo|codebase)|(repository|repo|codebase)[[:space:]]+(wide|전체)|리팩터|마이그레이션|restructure|migrate'; then
     echo "T3"
-  elif printf '%s' "$task_lc" | grep -qE '여러|several|multiple|across|integration|integrate|연동|통합|설계'; then
+  elif printf '%s' "$task_lc" | grep -qE '여러|several|multiple|across[[:space:]]+(multiple|several|[0-9]+|files?|modules?|components?|repository|repo|codebase)|integration|integrate|연동|통합|설계'; then
     echo "T2"
   elif printf '%s' "$task_lc" | grep -qE '읽기|요약|추출|정형|변환|read |summary|extract|transform|간단|small'; then
     echo "T0"

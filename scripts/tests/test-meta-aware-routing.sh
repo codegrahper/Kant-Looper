@@ -106,6 +106,41 @@ result="$("$ROUTING_PARSER" match-with-judgment "$TASK_FILE" --intent=implement 
 expected="opencode:glm-5.2"
 assert_eq "메타 판단: implement+T4 → opencode:glm-5.2" "$expected" "$result"
 
+echo ""
+echo "=== 의도/복잡도 휴리스틱 회귀 테스트 ==="
+
+printf '%s\n' '# Bash 어댑터의 작업 디렉터리 접근 권한 오류 수정' > "$TASK_FILE"
+result="$("$ROUTING_PARSER" classify-intent "$TASK_FILE")"
+assert_eq "접근 권한은 UI가 아니라 debug" "debug" "$result"
+
+printf '%s\n' '# UI 접근성 개선' > "$TASK_FILE"
+result="$("$ROUTING_PARSER" classify-intent "$TASK_FILE")"
+assert_eq "실제 UI 접근성은 ui" "ui" "$result"
+
+printf '%s\n' '# PR 리뷰 수행' > "$TASK_FILE"
+result="$("$ROUTING_PARSER" classify-intent "$TASK_FILE")"
+assert_eq "리뷰는 review" "review" "$result"
+
+printf '%s\n' '# 대규모 코드 리팩터링' > "$TASK_FILE"
+result="$("$ROUTING_PARSER" classify-intent "$TASK_FILE")"
+assert_eq "리팩터링은 refactor" "refactor" "$result"
+
+printf '%s\n' '# Bash 명령어 옵션 추가' > "$TASK_FILE"
+result="$("$ROUTING_PARSER" classify-intent "$TASK_FILE")"
+assert_eq "Bash 작업은 cli" "cli" "$result"
+
+printf '%s\n' '# 저장소 전체 영향 분석' > "$TASK_FILE"
+result="$("$ROUTING_PARSER" estimate-complexity "$TASK_FILE")"
+assert_eq "저장소 전체는 T3" "T3" "$result"
+
+printf '%s\n' '# Bash 어댑터의 전체 비용을 낮춘다' > "$TASK_FILE"
+result="$("$ROUTING_PARSER" estimate-complexity "$TASK_FILE")"
+assert_eq "전체 비용은 T3가 아님" "T1" "$result"
+
+printf '%s\n' '# archive 메타데이터를 읽는다' > "$TASK_FILE"
+result="$("$ROUTING_PARSER" estimate-complexity "$TASK_FILE")"
+assert_eq "archive의 부분 문자열은 T4가 아님" "T1" "$result"
+
 # ----------------------------------------------------------------------------
 # 결과 출력
 # ----------------------------------------------------------------------------

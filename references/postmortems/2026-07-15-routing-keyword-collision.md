@@ -102,14 +102,24 @@ fixture 설계에서 빠져 있었다.
    작업지시)으로 한 번은 검증해야 한다.** 단일 키워드짜리 인공적인 fixture만
    통과하는 테스트는 이런 클래스의 버그를 못 잡는다.
 
-## 후속 조치 후보 (미착수)
+## 후속 조치 후보 (전부 완료)
 
-- [ ] `--chain`을 `--full`/`--parallel` 모드의 실제 에이전트 선택 로직에 연결
-- [ ] `kant-loop.sh run --dry-run`과 `routing-parser.sh match`가
+- [x] `--chain`을 `--full`/`--parallel` 모드의 실제 에이전트 선택 로직에 연결
+      근거: `scripts/kant-loop.sh:550-558, 690-713, 1235, 1395, 1460`에서 chain을
+      각 모드의 실제 agent/model 선택에 전달·사용 (routing-unification Phase 3,
+      `b9582db`/`ede4aab`).
+- [x] `kant-loop.sh run --dry-run`과 `routing-parser.sh match`가
       `match-with-judgment`와 동일한 결과를 보여주도록 통일
-- [ ] `references/multimodel-coding-agent-routing-guide.md`에 intent 키워드 표를
-      실제로 추가하고, 코드가 그 표를 파싱하도록 맞추거나(SKILL.md 설명을 실제로
-      구현), 아니면 SKILL.md의 "가이드를 매번 파싱해서 동적으로 결정" 설명을
-      코드 현실에 맞게 정정
-- [ ] `test-meta-aware-routing.sh`에 실제 작업지시 스타일(여러 섹션 혼합) fixture
+      근거: 동일 TASK 파일을 세 명령에 넣어 `intent`/`complexity`/`judged_route`/
+      `effective_route`가 일치함을 확인 (routing-unification Phase 2, `79cdc19`).
+- [x] `references/multimodel-coding-agent-routing-guide.md`에 intent 키워드 표를
+      실제로 추가하거나, SKILL.md의 "가이드를 매번 파싱해서 동적으로 결정" 설명을
+      코드 현실에 맞게 정정 — **후자로 해결**
+      근거: `SKILL.md`의 "자동 라우팅 (T0~T4)" 섹션이 "판정 규칙의 SSOT는 코드다"로
+      정정됨 (routing-unification Phase 4, `8335145`). 가이드 문서 자체에 키워드
+      표를 추가하는 전략 A는 채택하지 않기로 명시적으로 결정됨.
+- [x] `test-meta-aware-routing.sh`에 실제 작업지시 스타일(여러 섹션 혼합) fixture
       추가로 회귀 커버리지 강화
+      근거: `scripts/tests/test-meta-aware-routing.sh:175-438`에 F1-F12/N1-N4
+      다문단 fixture가 존재하고 테스트 60/60 PASS (routing-unification Phase 5,
+      `a81dbf8`).

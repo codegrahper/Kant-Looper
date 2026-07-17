@@ -95,6 +95,22 @@
   효율적이라고 판단될 때만 완전히 갈아탄다. 네 가지 중 하나라도 아니면
   기존 shell adapter를 유지한다.
 
+### 검증 결과: opencode-mcp-tool (2026-07-17)
+
+`gilby125/opencode-mcp-tool`을 실제로 연결 시도 — **탈락**.
+
+- README의 `npx -y @gilby125/opencode-mcp-tool` 설치 명령이 npm 레지스트리
+  404로 실패 (`claude mcp add` 후 "Failed to connect" 확인, `npx` 직접 실행해서
+  원인 재현).
+- `package.json` 확인 결과 `@gilby125/opencode-mcp-tool`은 **npm에 배포된 적
+  없음**. 마지막 커밋 2025-12-02, 테스트 코드 없음(`"No tests yet"`), 관리자 1명.
+  소스 clone 후 직접 빌드하면 동작은 시키겠지만, 배포·테스트 안 된 1인
+  프로젝트를 우리가 직접 빌드·유지하는 부담이 생겨 전환 취지(유지보수 부담
+  경감)에 어긋남.
+- **결정 (이바 승인)**: opencode는 MCP로 전환하지 않는다. 기존
+  `adapter-opencode.sh`(shell)를 그대로 유지한다. MCP는 codex처럼 실제로
+  정식 배포·연결이 검증되는 후보에 한해서만 채택한다.
+
 ## 진행 방식 (이바 확정)
 
 - **도그푸딩 중심**: 새 기능을 먼저 만들고 나중에 테스트하는 게 아니라,
@@ -120,11 +136,11 @@
 
 ## 순서 요약
 
-1. `ssot-2WEEK-trial.md` 조기 종료 기록 정리
-2. opencode MCP(`opencode-mcp-tool` 등) 연결 → MinMax M3 2.7 / GLM 4.7 / GLM 5.2
-   모델로 실전 도그푸딩하며 안정성 판단
-3. (opencode 안정 확인되면) grok, agy 순으로 MCP 연결·검증 — 실패하면 기존
-   shell adapter 유지
+1. ✅ `ssot-2WEEK-trial.md` 조기 종료 기록 정리 (완료, `d9cdb33`)
+2. ✅ opencode MCP 검증 → `opencode-mcp-tool` 탈락(미배포 패키지), 기존
+   shell adapter 유지로 결론 (완료, 2026-07-17). MinMax M3 2.7 / GLM 4.7 /
+   GLM 5.2 모델 안정성 테스트는 기존 `adapter-opencode.sh` 경로로 계속 진행.
+3. grok, agy MCP 연결·검증 — 실패하면 기존 shell adapter 유지
 4. omo 도구 호출 방식 조사 → 참고할 패턴 반영
 5. SSOT/자기개선 코드 제거 (`routing-parser.sh`, `ssot-shadow.sh`,
    `routing-ssot/`, self-scan/self-dispatch, 관련 테스트)

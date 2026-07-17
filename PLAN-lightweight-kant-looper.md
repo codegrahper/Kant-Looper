@@ -132,6 +132,40 @@ read/result/cancel`, `agy_continue`, `agy_doctor`, `agy_install_skill`,
   `adapter-agy.sh`(shell, `--add-dir <worktree>` 방식)를 그대로 유지한다.
   agy-mcp가 `cd`/워킹 디렉토리 버그를 고치고 재배포하면 그때 재검증한다.
 
+### 검증 결과: grok-mcp (maikunari/grok-mcp) (2026-07-17)
+
+npm 미배포(`package.json` `"private": true`)라 git clone 후 직접 빌드해서
+검증. **기술적으로는 opencode/agy와 달리 통과** — 하지만 이바 판단으로
+채택하지 않고 shell adapter 유지 결정.
+
+- 빌드: `git clone` → `npm install` → `npm run build` (tsc) 정상 완료.
+  소스(`src/index.ts`, 1118줄) 검토 결과 `spawn(grok 바이너리)` 외 외부
+  네트워크 호출·`eval` 없음 — 깨끗함. 마지막 커밋 2026-07-09(검증 시점
+  기준 8일 전), 관리자 1명(maikunari)이지만 짧은 기간에 버전을 여러 번
+  올릴 만큼 활발.
+- MCP stdio 프로토콜을 직접 스크립트로 구사(JSON-RPC `initialize` →
+  `tools/list` → `tools/call`)해서 실제 동작 확인 — 세션 도중 등록이라
+  `ToolSearch`에 도구가 안 잡혀서(agy와 동일한 제약) 새 서버 프로세스를
+  수동으로 띄워 검증:
+  - **read-only 호출**: `pwd`/`ls`를 지정한 `cwd`(kant-looper-dev)에서
+    정확히 실행 — agy-mcp와 달리 `cwd` 파라미터가 실제로 적용됨.
+  - **쓰기 호출**: 스크래치 디렉토리에 `hello.txt`를 정확한 내용으로 생성,
+    `cat`으로 직접 재검증 완료.
+  - **백그라운드 job**: `background: true`로 `job_id` 발급 → 완전히 새로운
+    서버 프로세스에서 `grok_task_result`로 폴링해도 결과 조회됨
+    (`~/.grok-mcp/jobs/` 영속화 — README 주장 실증).
+  - **구조화 응답**: `files_changed`(git 저장소는 git-verified, 비git
+    디렉토리는 transcript 폴백으로 정확히 라벨링), `session_id`,
+    `stop_reason` 등 README 명세와 일치.
+- **트레이드오프 지적**: 기존 `adapter-grok.sh`는 role별로 `plan/review/
+  verify`에서 `--deny 'Bash(*)' --deny 'Edit(*)'`를 **셸이 명시적으로
+  강제**하는데, grok-mcp는 `permission_mode`(예: `auto`) 하나로 승인
+  범위가 결정되어 이 세밀한 강제가 없음 — MCP로 전환하면 read-only role의
+  쓰기 차단을 셸이 아니라 **호출 시점의 클로드 판단**에 맡기게 됨.
+- **결정 (이바 확정, 2026-07-17)**: grok도 MCP로 전환하지 않는다. 기존
+  `adapter-grok.sh`(shell)를 유지한다. opencode/agy/grok 세 도구 모두
+  이번 라운드에서는 shell adapter 유지로 귀결.
+
 ## 진행 방식 (이바 확정)
 
 - **도그푸딩 중심**: 새 기능을 먼저 만들고 나중에 테스트하는 게 아니라,
@@ -164,8 +198,12 @@ read/result/cancel`, `agy_continue`, `agy_doctor`, `agy_install_skill`,
 3. grok, agy MCP 연결·검증 — 실패하면 기존 shell adapter 유지
    - ✅ agy MCP 검증 완료 → **탈락**(`cd` 파라미터 미적용, 고정 스크래치
      디렉토리에서 실행됨). `adapter-agy.sh` 유지 (완료, 2026-07-17).
-   - ⏳ grok-mcp(maikunari/grok-mcp) 검증 남음 (npm 미배포, 소스 clone·빌드
-     필요).
+   - ✅ grok-mcp 검증 완료 → 기술적으로는 통과(cwd/쓰기/백그라운드 job 모두
+     실측 확인)했으나, role별 read-only 강제(Bash/Edit deny)를 셸이 아닌
+     클로드 판단에 맡기게 되는 트레이드오프 때문에 이바가 **비채택** 결정.
+     `adapter-grok.sh` 유지 (완료, 2026-07-17).
+   - **3단계 최종 결론**: opencode/agy/grok 세 도구 모두 shell adapter
+     유지. MCP 전환은 이번 라운드에서 0건.
 4. omo 도구 호출 방식 조사 → 참고할 패턴 반영
 5. SSOT/자기개선 코드 제거 (`routing-parser.sh`, `ssot-shadow.sh`,
    `routing-ssot/`, self-scan/self-dispatch, 관련 테스트)

@@ -39,10 +39,19 @@ allowed-tools:
 
 **단축 입력이 유효하면:**
 
-- `@도구:모델` (모델까지 지정됨) + 같은 메시지에 작업 설명 텍스트가 있으면 → Step 1과 Step 2를 모두 건너뛰고 바로 Step 3으로 진행한다.
-- `@도구:모델` + 작업 설명 텍스트가 없으면 → Step 2는 건너뛰되 Step 1의 질문("어떤 작업을 할까요?")만 한다.
+- `@도구:모델` (모델까지 지정됨) + 같은 메시지에 작업 설명 텍스트가 있으면 → Step 1과 Step 2를 모두 건너뛴다. 단, 도구가 `agy`이면 아래 Stitch 선택 UI를 먼저 띄운 뒤 Step 3으로 진행한다.
+- `@도구:모델` + 작업 설명 텍스트가 없으면 → Step 2는 건너뛰되 Step 1의 질문("Nomad Kant, 칸트와 유랑합니다. 🙏")을 한다. 도구가 `agy`이면 작업 내용을 받은 뒤 Stitch 선택 UI를 띄우고 Step 3으로 진행한다.
 - `@도구`만 있고 모델이 없으면 → 도구 선택은 확정됐지만 모델은 미정이므로, Step 2 "직접 선택"의 **모델 선택 UI만** 그 도구 기준으로 띄운다 (Step 2의 "선택형 UI 가용성" 절과 동일 로직 — 선택형 UI 가용 시 AskUserQuestion류 사용, 아니면 텍스트 목록 폴백). 작업 설명이 없으면 모델 선택과 별개로 Step 1 질문도 필요.
   - 자동 기본값을 임의로 고르지 않는다. 반드시 사용자가 모델을 직접 선택하게 한다.
+  - 도구가 `agy`이면 모델 선택과 아래 Stitch 선택을 한 번의 AskUserQuestion 호출에 두 질문으로 묶는다.
+
+**Stitch 선택 UI (`agy` 전용):**
+
+질문: 이 작업에 Google Stitch(UI 디자인 생성 MCP)를 사용할까요?
+- 예 — Stitch로 먼저 시안 생성 (agy가 Stitch MCP를 먼저 호출해 UI 시안을 만든 뒤, 그 결과를 바탕으로 구현한다)
+- 아니오 — agy가 바로 구현 (Stitch 없이 agy가 직접 코드로 구현, 기존 기본 동작)
+
+자동 기본값을 고르지 않고 반드시 사용자가 직접 선택하게 한다.
 
 **단축 입력이 무효하면** (도구명 불일치, 모델명 불일치):
 
@@ -58,7 +67,7 @@ allowed-tools:
 
 **질문:**
 
-어떤 작업을 할까요?
+Nomad Kant, 칸트와 유랑합니다. 🙏
 
 사용자의 자유 입력을 기다린다.
 
@@ -117,9 +126,15 @@ allowed-tools:
    - 사용 불가 시 `fallback-dispatcher`의 하드코딩 체인에서 첫 번째 가용 후보 선택.
 
 5. **사용자 확인** — 도구와 모델을 사용자에게 보여주고 진행 여부 확인.
+   선택 결과가 `agy`이면 확인 직전 또는 같은 선택 UI에서 Stitch 사용 여부도
+   반드시 묻는다. 자동 기본값은 고르지 않는다.
+
+   질문: 이 작업에 Google Stitch(UI 디자인 생성 MCP)를 사용할까요?
+   - 예 — Stitch로 먼저 시안 생성 (agy가 Stitch MCP를 먼저 호출해 UI 시안을 만든 뒤, 그 결과를 바탕으로 구현한다)
+   - 아니오 — agy가 바로 구현 (Stitch 없이 agy가 직접 코드로 구현, 기존 기본 동작)
 
 이 프로세스는 라우팅 정책(`references/multimodel-coding-agent-routing-guide.md`)을
-참고 자료로 삼아 클로드가 직접 판단한다. 이바가 도구를 명시하면(오버라이드)
+참고 자료로 삼아 클로드가 직접 판단한다. 사용자가 도구를 명시하면(오버라이드)
 그 지시를 그대로 따르고 이 자동 선택 절차는 건너뛴다.
 
 **선택 2: 직접 선택**
@@ -158,6 +173,15 @@ allowed-tools:
 **Antigravity:**
 - `agy:gemini-3.5-flash` (멀티모달, 브라우저/UI, 빠른 반복)
 - `agy:gemini-3.1-pro-preview` (복잡한 설계, 정밀한 reasoning)
+
+`agy`를 선택하면 모델 선택과 함께 다음 Stitch 선택 UI를 띄운다. 모델이 이미
+정해졌다면 Stitch 질문만 단독으로 띄운다.
+
+질문: 이 작업에 Google Stitch(UI 디자인 생성 MCP)를 사용할까요?
+- 예 — Stitch로 먼저 시안 생성 (agy가 Stitch MCP를 먼저 호출해 UI 시안을 만든 뒤, 그 결과를 바탕으로 구현한다)
+- 아니오 — agy가 바로 구현 (Stitch 없이 agy가 직접 코드로 구현, 기존 기본 동작)
+
+자동 기본값을 고르지 않고 반드시 사용자가 직접 선택하게 한다.
 
 `agy` CLI 1.1.x는 `--model` 플래그에 표시 이름(`Gemini 3.5 Flash (Medium)` 등)만 받는다.
 kant-looper는 내부적으로 짧은 ID(`gemini-3.5-flash`)를 그대로 쓰고,
@@ -203,6 +227,13 @@ kant-loop.sh run TASK.md --quick --agent opencode --model MiniMax-M2.7
 ### 작업지시 작성
 
 작업지시에는 필요한 범위에서 다음 내용을 포함한다.
+
+Stitch 선택에서 "예"를 골랐다면 `## 작업 내용`의 첫 항목으로 아래 절차를
+반드시 추가하고, 나머지 작업 번호를 뒤로 민다. "아니오"를 골랐다면 추가하지 않는다.
+
+```markdown
+1. Stitch MCP를 먼저 호출해 UI 시안을 생성한다. 이후 그 결과를 바탕으로 구현을 진행한다.
+```
 
 **작업지시 형식:**
 
@@ -257,9 +288,25 @@ Model: <선택된 모델>
 <Task 내용>
 ```
 
-실행 명령:
+실행 명령 (기본, foreground):
 ```bash
 bash "$HOME/.claude/skills/kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model"
+```
+foreground 실행은 Bash 도구 호출 자체가 완료까지 블로킹하므로 별도 콜백 설정이
+필요 없다 — 호출이 끝나면 그 결과가 곧 완료 통지다.
+
+**`--detach`를 쓰는 경우(장시간 작업 등) 반드시 지킬 것**: `--detach`는 사람에게
+macOS 알림을 줄 뿐 클로드에게는 아무 신호도 오지 않는다. `--detach`로 던진 뒤
+바로 이어서 `await <run_id>`를 Bash 도구의 `run_in_background: true`로 호출해야
+완료 시 하네스가 클로드를 깨운다. `--detach`만 실행하고 후속 `await` 없이
+턴을 끝내면 안 된다(2026-07-17 실측: 이걸 빠뜨려서 사용자가 직접 macOS
+알림을 보고 폴링해야 했음).
+
+```bash
+bash "$HOME/.claude/skills/kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model" --detach
+# → run_id 즉시 반환
+# 곧바로 이어서, Bash 도구 run_in_background: true로:
+bash "$HOME/.claude/skills/kant-looper/scripts/kant-loop.sh" await "$run_id"
 ```
 
 이후 Meta Agent의 역할은 종료된다.
@@ -274,7 +321,9 @@ bash "$HOME/.claude/skills/kant-looper/scripts/kant-loop.sh" run "TASK.md" --qui
   - 유효한 `@도구:모델` 단축 입력만 있고 작업 설명이 없으면: 작업 내용 질문 한 번만 한다.
   - `@도구`만 있고 모델이 없으면: 모델 선택 UI를 띄운다 (작업 설명 없으면 작업 내용 질문도 함께).
   - 단축 입력이 무효하면: 정상 두 질문 흐름으로 돌아간다 (무효 안내 한 줄 추가).
-- 추가 확인 질문 금지 (단, 위 모델 선택 UI는 "질문"이 아니라 선택 UI로 취급한다 — 자유 텍스트 질문을 새로 만드는 게 아니라 기존 Step 2 모델 목록을 재사용하는 것이므로 이 금지 규칙의 대상이 아니다).
+- 추가 확인 질문 금지 (단, 위 모델 선택 UI와 Stitch 선택 UI는 "질문"이 아니라 선택 UI로 취급한다 — 자유 텍스트 질문을 새로 만드는 게 아니라 정해진 선택지를 재사용하는 것이므로 이 금지 규칙의 대상이 아니다).
+- `agy`가 선택되면 반드시 Stitch 사용 여부를 먼저 확인한다. 자동 기본값을 고르지 않는다.
+- `--detach`로 실행했다면 반드시 그 자리에서 바로 `await <run_id>`를 background로 이어서 호출한다. `--detach`만 실행하고 끝내지 않는다.
 - Meta Agent는 작업을 직접 구현하지 않는다.
 - 해결책을 제안하지 않는다.
 - 분석하지 않는다.
@@ -291,7 +340,7 @@ bash "$HOME/.claude/skills/kant-looper/scripts/kant-loop.sh" run "TASK.md" --qui
 ```
 User: /kant-looper
 
-Assistant: 어떤 작업을 할까요?
+Assistant: Nomad Kant, 칸트와 유랑합니다. 🙏
 
 User:大型 저장소의 버그를 수정해주세요.
 
@@ -351,7 +400,7 @@ Model: glm-5.2
 ```
 User: /kant-looper
 
-Assistant: 어떤 작업을 할까요?
+Assistant: Nomad Kant, 칸트와 유랑합니다. 🙏
 
 User: 단위 테스트를 추가해주세요.
 
@@ -467,7 +516,7 @@ Assistant: 모델을 선택하세요:
 
 User: gpt-5.6-luna
 
-Assistant: 어떤 작업을 할까요?
+Assistant: Nomad Kant, 칸트와 유랑합니다. 🙏
 
 User: 단위 테스트를 추가해주세요.
 
@@ -582,7 +631,7 @@ kant-loop.sh cleanup --apply
 | 기본 | codex (gpt-5.6-terra) |
 
 **유지보수 절차**: 이 표나 가이드 문서의 모델명이 바뀌면 문서만 고치면 된다 —
-동기화해야 할 코드가 없다. 후보 모델 자체(레지스트리)는 이바가 정의·유지하고,
+동기화해야 할 코드가 없다. 후보 모델 자체(레지스트리)는 사용자가 정의·유지하고,
 그 범위 안에서 클로드가 작업마다 판단해서 위임한다.
 
 ### 안전 약속 (절대 위반 안 됨)
@@ -655,7 +704,7 @@ main에 합치시려면:
 > 3. **MCP/CLI health check를 모든 호출 전 수행**. 죽은 도구는 즉시 우회.
 > 4. **Claude 사용량 절감**. Claude는 메타 오케스트레이션만.
 > 5. **merge는 사용자가 명시 실행**. 3중 강제 (allowed-tools + 스크립트 + promote 분기).
-> 6. **이바가 개입하는 순간 그건 kant-looper가 아닙니다**. 완전 자동이 1차 목표.
+> 6. **사용자가 개입하는 순간 그건 kant-looper가 아닙니다**. 완전 자동이 1차 목표.
 > 7. **칸트는 냉정합니다**. verdict는 verdict대로. 감정/사정 개입 없이 원칙만으로 결정.
 
 상세 backend 동작은 `references/loop-flow.md` 참조. 그 외 모든 것은 스크립트가 담당.

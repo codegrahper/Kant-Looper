@@ -40,17 +40,6 @@ version() {
 # MiniMax model detection (bash 3.2 compatible)
 # ---------------------------------------------------------------------------
 
-is_minimax_model() {
-  case "$1" in
-    MiniMax-M3|MiniMax-M2.7|MiniMax-M2.7-highspeed)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 # ---------------------------------------------------------------------------
 # call
 # ---------------------------------------------------------------------------
@@ -76,27 +65,24 @@ call() {
   local timeout
   timeout=$("$SKILL_LIB/timeout-runner.sh" timeout-for "$role")
 
-  # opencode는 "provider/model" 형태를 요구한다 (예: opencode-go/glm-5.2).
+  # opencode는 "provider/model" 형태를 요구한다 (예: zai-coding-plan/glm-5.2).
   # bare 이름("glm-5.2", "glm-4.7" 등)이 들어오면 ProviderModelNotFoundError 발생.
   # 이미 "/"를含む 이름은 정규화 없이 그대로 사용.
   local variant="${KANT_OPENCODE_VARIANT:-high}"
 
-  local glm_provider="${KANT_OPENCODE_GLM_PROVIDER:-opencode-go}"
-  local minimax_provider="${KANT_MINIMAX_OPENCODE_PROVIDER:-minimax}"
+  local glm_provider="${KANT_OPENCODE_GLM_PROVIDER:-zai-coding-plan}"
+  local minimax_provider="${KANT_OPENCODE_MINIMAX_PROVIDER:-opencode-go}"
   local normalized_model="$model"
   if ! printf '%s' "$model" | grep -q '/'; then
     case "$model" in
-      glm-4.7)
-        # glm-4.7은 zai-coding-plan 프리픽스 사용
-        normalized_model="zai-coding-plan/${model}"
-        ;;
       glm-5.*|glm-4.*)
-        # glm-5.x와 그 외 glm-4.x는 opencode-go 프리픽스 사용
         normalized_model="${glm_provider}/${model}"
         ;;
-      MiniMax-M3|MiniMax-M2.7|MiniMax-M2.7-highspeed)
-        # MiniMax models use minimax provider prefix
-        normalized_model="${minimax_provider}/${model}"
+      MiniMax-M3)
+        normalized_model="${minimax_provider}/minimax-m3"
+        ;;
+      MiniMax-M2.7)
+        normalized_model="${minimax_provider}/minimax-m2.7"
         ;;
       *)
         # 알 수 없는 bare 이름은 로그만 남기고 그대로 시도 (다른 프로바이더일 수 있음)

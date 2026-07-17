@@ -149,7 +149,6 @@ allowed-tools:
 - `opencode:glm-4.7` (실용형 - 일상 개발, 비용·품질 균형)
 - `opencode:MiniMax-M3` (1M 컨텍스트, 장기 에이전트)
 - `opencode:MiniMax-M2.7` (일반 코딩, 비용 균형)
-- `opencode:MiniMax-M2.7-highspeed` (낮은 지연)
 
 **Grok:**
 - `grok:grok-4.5` (터미널, Rust/C/C++, 풀스택, 빠른 도구 루프)
@@ -178,7 +177,6 @@ kant-looper는 내부적으로 짧은 ID(`gemini-3.5-flash`)를 그대로 쓰고
 ```bash
 kant-loop.sh run TASK.md --quick --agent opencode --model MiniMax-M3
 kant-loop.sh run TASK.md --quick --agent opencode --model MiniMax-M2.7
-kant-loop.sh run TASK.md --quick --agent opencode --model MiniMax-M2.7-highspeed
 ```
 
 모델 선택 후 선택된 내용을 확인하고 진행한다.
@@ -500,11 +498,10 @@ TASK.md → 백그라운드로 외부 도구 호출 → 결과 검증 → 작업
 
 | 모드 | 인자 | 적합 | 백엔드 동작 |
 |---|---|---|---|
-| `--quick` | 단일 도구 한 번 호출 + gate + (선택) commit | T0~T1, 가벼운 수정 | 풀 라운드/카드 시스템 생략 |
-| `--parallel` | 2~4개 도구 동시 호출 + 머지 + commit | T2, UI+로직+테스트 분리 | `nohup + wait` 병렬 |
-| `--full` | plan → implement → review → commit (+ repair 라운드) | T3~T4, 복잡한 작업 | HPRAR 풀 루프 (MAX_ROUNDS=2) |
+| `--quick` | 단일 도구 호출 또는 3단계 순차 체인 | 모든 파일 변경 작업 | `--chain`은 구현→검토→수정 |
+| `--parallel` | 최대 4개 도구 동시 읽기 전용 검토 | 독립 검토·분석 | 파일 변경·자동 커밋 없음 |
 
-기본값은 `--full`. T0~T1 작업에 무거운 풀 루프는 과합니다. 가벼운 작업엔 `--quick`을 명시.
+기본값은 `--quick`입니다. 복잡한 수정은 `--quick --chain`으로 구현, 검토, 수정을 순차 실행합니다. HPRAR `--full` 모드는 중단되었습니다.
 
 ### 호출 예시
 
@@ -516,12 +513,11 @@ kant-loop.sh run TASK.md --dry-run
 # 가벼움: --quick (단일 호출)
 kant-loop.sh run TASK.md --quick --agent codex --model gpt-5.6-terra
 
-# 동시성: --parallel (UI + 로직 + 검증, --chain 필수)
-kant-loop.sh run TASK.md --parallel --chain codex:gpt-5.6-terra,opencode:glm-5.2,agy:gemini-3.5-flash
+# 순차 체인: 구현 → 검토 → 수정
+kant-loop.sh run TASK.md --quick --chain opencode:glm-5.2,codex:gpt-5.6-sol,codex:gpt-5.6-terra
 
-# 풀: --full (기본, HPRAR)
-kant-loop.sh run TASK.md
-kant-loop.sh run TASK.md --strict-verify    # Round 1 PASS여도 verify 강제
+# 동시성: --parallel (읽기 전용 검토, --chain 필수)
+kant-loop.sh run TASK.md --parallel --chain codex:gpt-5.6-terra,opencode:glm-5.2,agy:gemini-3.5-flash
 kant-loop.sh run TASK.md --no-auto-commit  # PASS까지만, commit은 사용자가
 
 # 백그라운드 (장기 작업)
@@ -617,10 +613,10 @@ routing 가이드 10.2 정책 기반. 같은 diff 3회 / 같은 테스트 실패
 작업 끝났어요.
 
 - run-id: <RUN_ID>
-- 모드: --quick / --parallel / --full
+- 모드: --quick / --parallel
 - 결과: PASS / CHANGES_REQUESTED / BLOCKED / FALLBACK_TO_CLAUDE
 - 사용된 도구: codex(gpt-5.6-terra) → glm-5.2 (fallback) → claude (final)
-- 라운드: 1 (strict-verify=0) 또는 2
+- quick 체인: implement → review → repair
 - 브랜치: agent/kant/<run-id>
 - 커밋: <COMMIT_SHA> (tree <COMMITTED_TREE_SHA>)
 - 변경 파일 수: <N>

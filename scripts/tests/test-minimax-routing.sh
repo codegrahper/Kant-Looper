@@ -64,7 +64,16 @@ assert_not_contains() {
 MINIMAX_MODELS=(
   "MiniMax-M3"
   "MiniMax-M2.7"
+)
+
+UNAVAILABLE_MINIMAX_MODELS=(
   "MiniMax-M2.7-highspeed"
+  "MiniMax-M2.5-highspeed"
+)
+
+GLM_MODELS=(
+  "glm-4.7"
+  "glm-5.2"
 )
 
 # ----------------------------------------------------------------------------
@@ -88,6 +97,17 @@ for model in "${MINIMAX_MODELS[@]}"; do
     FAILED=$((FAILED + 1))
   else
     echo "${GREEN}PASS${NC}: claude rejects $model"
+    PASSED=$((PASSED + 1))
+  fi
+done
+
+for model in "${UNAVAILABLE_MINIMAX_MODELS[@]}"; do
+  assert_not_contains "opencode does not list unavailable $model" "$model" "$opencode_models"
+  if "$MODEL_SELECTOR" validate opencode "$model" >/dev/null 2>&1; then
+    echo "${RED}FAIL${NC}: opencode should reject unavailable $model"
+    FAILED=$((FAILED + 1))
+  else
+    echo "${GREEN}PASS${NC}: opencode rejects unavailable $model"
     PASSED=$((PASSED + 1))
   fi
 done
@@ -139,7 +159,8 @@ run_opencode_normalization() {
 
   if ! PATH="$MOCK_BIN:$PATH" \
     KANT_TEST_OPENCODE_MODEL="$MOCK_OPENCODE_MODEL" \
-    KANT_MINIMAX_OPENCODE_PROVIDER="minimax" \
+    KANT_OPENCODE_GLM_PROVIDER="zai-coding-plan" \
+    KANT_OPENCODE_MINIMAX_PROVIDER="opencode-go" \
     KANT_TIMEOUT_PLAN=1 \
     "$ADAPTER_OPENCODE" call plan "$PROMPT_FILE" "$WORKTREE" "$model" \
     > "$TMPDIR/opencode-output" 2> "$TMPDIR/opencode-error"; then
@@ -152,7 +173,17 @@ run_opencode_normalization() {
 
 for model in "${MINIMAX_MODELS[@]}"; do
   if normalized_model="$(run_opencode_normalization "$model")"; then
-    assert_eq "adapter-opencode normalizes $model" "minimax/$model" "$normalized_model"
+    expected_model="opencode-go/$(printf '%s' "$model" | tr '[:upper:]' '[:lower:]')"
+    assert_eq "adapter-opencode normalizes $model to provider/model" "$expected_model" "$normalized_model"
+  else
+    echo "${RED}FAIL${NC}: adapter-opencode should normalize $model"
+    FAILED=$((FAILED + 1))
+  fi
+done
+
+for model in "${GLM_MODELS[@]}"; do
+  if normalized_model="$(run_opencode_normalization "$model")"; then
+    assert_eq "adapter-opencode normalizes $model to Z.AI Coding Plan" "zai-coding-plan/$model" "$normalized_model"
   else
     echo "${RED}FAIL${NC}: adapter-opencode should normalize $model"
     FAILED=$((FAILED + 1))

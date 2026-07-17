@@ -15,6 +15,7 @@ SKILL_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TESTS=(
   "bash scripts/lib/safety-check.sh self-test"
   "bash scripts/tests/test-quick-mode-fallback.sh"
+  "bash scripts/tests/test-mode-contract.sh"
   "bash scripts/tests/test-fix-apply-redesign.sh"
   "bash scripts/tests/test-fix-apply-guards.sh"
   "bash scripts/tests/test-meta-agent-loop.sh"
@@ -32,6 +33,7 @@ TESTS=(
 LABELS=(
   "safety-check (전체 모듈 lint)"
   "PR A: do_fallback verdict"
+  "quick/parallel mode contract"
   "PR B: fix-apply redesign (P0/P1)"
   "PR B: fix-apply guards"
   "PR B: meta-agent 모듈"

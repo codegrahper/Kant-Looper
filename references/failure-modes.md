@@ -152,9 +152,9 @@ Round 1 PASS, Round 2에서 일부 phase 진행하다 중단
 ### FAILED로 가는 경로
 
 ```
-verdict=CHANGES_REQUESTED + MAX_ROUNDS 도달
+quick 체인의 implement/review/repair 중 하나가 PASS가 아님
 verdict=BLOCKED
-gate fail + repair 중단
+gate fail
 → FAILED
 → fallback_dispatch 시도
 ```

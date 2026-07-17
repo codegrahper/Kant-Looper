@@ -4,7 +4,7 @@
 # 시나리오:
 #   A: --quick 단일 호출 (T1 작업, 한 사이클)
 #   B: --parallel 동시 호출 (T2 작업, UI + 로직 + 검증 분리)
-#   C: --full HPRAR 풀 루프 (T3 작업, 다중 파일 리팩터링)
+#   C: --quick 구현→검토→수정 체인
 #
 # 각 시나리오는:
 #   1. 임시 worktree 생성
@@ -166,64 +166,25 @@ EOF
   return 0
 }
 
-# 시나리오 C: --full HPRAR 풀 라운드
 scenario_c() {
-  log "=== 시나리오 C: --full HPRAR 풀 루프 ==="
+  log "=== 시나리오 C: --quick 구현→검토→수정 체인 ==="
 
   local test_repo
   test_repo="$(setup_test_env)"
-
-  # 다중 파일 리팩터링 시뮬레이션
-  mkdir -p "$test_repo/src"
-  for i in 1 2 3; do
-    cat > "$test_repo/src/module$i.ts" <<EOF
-export function func$i(input: string): string {
-  return input.toUpperCase();
-}
-EOF
-  done
-
-  (cd "$test_repo" && git add -A && git commit -m "init" -q)
-
   local task_md="$test_repo/TASK.md"
-  cat > "$task_md" <<EOF
-# 작업
-3개 모듈의 함수들을 리팩터링 부탁드려요.
+  printf '%s\n' '# 작업' '' '## 목표' '작은 변경을 구현하고 검토와 수정을 순차 실행한다.' > "$task_md"
 
-## 목표
-func1/func2/func3을 async 함수로 변경하고 통합 인터페이스 제공.
-
-## 영향 범위
-- src/module1.ts
-- src/module2.ts
-- src/module3.ts
-- src/index.ts (신규)
-
-## 완료 조건
-- 모든 funcN이 async function으로 변경
-- src/index.ts가 모든 모듈을 re-export
-EOF
-
-  log "  dry-run..."
-  "$SKILL_ROOT/scripts/kant-loop.sh" run "$task_md" --dry-run --full || {
-    log "  FAIL: dry-run returned non-zero"
+  local chain="opencode:glm-5.2,codex:gpt-5.6-sol,codex:gpt-5.6-terra"
+  if "$SKILL_ROOT/scripts/kant-loop.sh" run "$task_md" --dry-run --quick --chain "$chain"; then
+    PASS=$((PASS+1))
+    SCENARIO_RESULTS+=("C: PASS (quick-chain dry-run)")
+  else
     FAIL=$((FAIL+1))
     SCENARIO_RESULTS+=("C: DRY-RUN_FAILED")
     return 1
-  }
-
-  log "  dry-run 통과"
-  log "  실제 실행:"
-  log "    cd $test_repo"
-  log "    $SKILL_ROOT/scripts/kant-loop.sh run $task_md --full"
-  log ""
-
-  PASS=$((PASS+1))
-  SCENARIO_RESULTS+=("C: PASS (dry-run)")
-  return 0
+  fi
 }
 
-# 시나리오 라우터 + health check 검증
 scenario_smoke() {
   log "=== smoke: 라우터 + health check 검증 ==="
 

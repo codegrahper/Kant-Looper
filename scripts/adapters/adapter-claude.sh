@@ -53,7 +53,7 @@ call() {
   local bare_model="${model##*:}"
   bare_model="${bare_model##*/}"
   case "$bare_model" in
-    MiniMax-M3|MiniMax-M2.7|MiniMax-M2.7-highspeed)
+    MiniMax-M3|MiniMax-M2.7|MiniMax-M2.7-highspeed|MiniMax-M2.5-highspeed)
       echo "ERROR: MiniMax models are available only through the OpenCode agent." >&2
       echo "ERROR: Claude remains independent and does not select MiniMax model IDs." >&2
       return 1

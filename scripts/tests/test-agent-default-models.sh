@@ -62,10 +62,13 @@ validate_agent_model_compatibility() {
       ;;
     opencode)
       if ! echo "$model" | grep -qE '^glm-'; then
-        if ! echo "$model" | grep -qE '^MiniMax-'; then
-          echo "ERROR: opencode requires glm-* or MiniMax-* model, got '$model'" >&2
-          return 1
-        fi
+        case "$model" in
+          MiniMax-M3|MiniMax-M2.7) ;;
+          *)
+            echo "ERROR: opencode requires glm-* or a supported MiniMax model, got '$model'" >&2
+            return 1
+            ;;
+        esac
       fi
       ;;
     grok)
@@ -132,7 +135,6 @@ test_compat_valid "opencode" "glm-5.2"
 test_compat_valid "opencode" "glm-4.7"
 test_compat_valid "opencode" "MiniMax-M3"
 test_compat_valid "opencode" "MiniMax-M2.7"
-test_compat_valid "opencode" "MiniMax-M2.7-highspeed"
 test_compat_valid "grok" "grok-4.5"
 test_compat_valid "grok" "grok-4.3"
 test_compat_valid "agy" "gemini-3.5-flash"
@@ -161,6 +163,8 @@ test_compat_invalid "codex" "glm-5.2"
 test_compat_invalid "codex" "grok-4.5"
 test_compat_invalid "opencode" "gpt-5.6-sol"
 test_compat_invalid "opencode" "grok-4.5"
+test_compat_invalid "opencode" "MiniMax-M2.7-highspeed"
+test_compat_invalid "opencode" "MiniMax-M2.5-highspeed"
 test_compat_invalid "grok" "gpt-5.6-sol"
 test_compat_invalid "grok" "glm-5.2"
 test_compat_invalid "agy" "gpt-5.6-sol"
@@ -168,6 +172,7 @@ test_compat_invalid "agy" "glm-5.2"
 test_compat_invalid "claude" "MiniMax-M3"
 test_compat_invalid "claude" "MiniMax-M2.7"
 test_compat_invalid "claude" "MiniMax-M2.7-highspeed"
+test_compat_invalid "claude" "MiniMax-M2.5-highspeed"
 
 # ---------------------------------------------------------------------------
 # Results

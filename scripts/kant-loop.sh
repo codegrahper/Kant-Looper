@@ -3,8 +3,8 @@
 #
 # 서브커맨드:
 #   preflight TASK.md                          환경 검사 (side-effect 없음)
-#   run TASK.md [--quick|--parallel|--full]    모드 디스패치 (기본 = --full)
-#        [--dry-run] [--strict-verify] [--no-auto-commit] [--detach]
+#   run TASK.md [--quick|--parallel]           모드 디스패치 (기본 = --quick)
+#        [--dry-run] [--no-auto-commit] [--detach]
 #   status --latest | RUN_ID                   실행 상태
 #   await RUN_ID [--timeout N] [--interval N]  완료 블로킹 대기
 #   report RUN_ID                              사용자 보고용 markdown 생성
@@ -42,8 +42,6 @@ export KANT_ADAPTERS_DIR="$ADAPTERS_DIR"
 # ---------------------------------------------------------------------------
 
 STATE_ROOT="${KANT_STATE_ROOT:-$HOME/.claude/state/kant-looper}"
-MAX_ROUNDS="${KANT_MAX_ROUNDS:-2}"
-STRICT_TWO_ROUND_VERIFY="${KANT_STRICT_TWO_ROUND_VERIFY:-0}"
 AUTO_COMMIT="${KANT_AUTO_COMMIT:-1}"
 BRANCH_PREFIX="${KANT_BRANCH_PREFIX:-agent/kant}"
 NOTIFY="${KANT_NOTIFY:-1}"
@@ -339,10 +337,13 @@ validate_agent_model_compatibility() {
       ;;
     opencode)
       if ! echo "$model" | grep -qE '^glm-'; then
-        if ! echo "$model" | grep -qE '^MiniMax-'; then
-          echo "ERROR: opencode requires glm-* or MiniMax-* model, got '$model'" >&2
-          return 1
-        fi
+        case "$model" in
+          MiniMax-M3|MiniMax-M2.7) ;;
+          *)
+            echo "ERROR: opencode requires glm-* or a supported MiniMax model, got '$model'" >&2
+            return 1
+            ;;
+        esac
       fi
       ;;
     grok)
@@ -373,6 +374,7 @@ validate_agent_model_compatibility() {
 
 run_quick_mode() {
   local task_md="$1" tool="${2:-}" model="${3:-}" state_dir="$4" worktree="$5"
+  local role="${6:-implement}" commit_at_end="${7:-1}"
 
   # --agent만 지정되고 --model이 없을 때: agent 기본 모델 자동 선택
   if [ -n "$tool" ] && [ -z "$model" ]; then
@@ -393,10 +395,10 @@ run_quick_mode() {
     return 1
   fi
 
-  log "quick mode: $tool:$model"
-  log_event "$state_dir" "QUICK_CALL tool=$tool model=$model"
+  log "quick mode: $role $tool:$model"
+  log_event "$state_dir" "QUICK_CALL role=$role tool=$tool model=$model"
 
-  local prompt_file="$state_dir/prompt-quick.md"
+  local prompt_file="$state_dir/prompt-quick-$role.md"
   cat > "$prompt_file" <<EOF
 $(cat "$task_md")
 
@@ -408,6 +410,12 @@ Use only relative paths. Do not recreate the worktree directory.
 Examples: calculator.py, DONE.md, codex/, opencode/, grok/, agy/
 Forbidden: Desktop/, ~/Desktop/, Users/, C:\
 Agents modify only their own workspace. Do not modify other agent folders.
+
+---
+
+역할:
+$role 역할만 수행하세요.
+$(if [ "$role" = "review" ]; then echo "현재 변경을 읽기 전용으로 검토하세요. 파일을 수정하지 마세요."; fi)
 
 ---
 
@@ -440,7 +448,7 @@ EOF
 
   # set -e 안전 패턴 (command substitution 실패 시에도 rc 검출)
   local output rc=0
-  if output="$("$adapter" call "implement" "$prompt_file" "$worktree" "$model" 2>>"$state_dir/phase-events.log")"; then
+  if output="$("$adapter" call "$role" "$prompt_file" "$worktree" "$model" 2>>"$state_dir/phase-events.log")"; then
     rc=0
   else
     rc=$?
@@ -455,7 +463,7 @@ EOF
 
     # fallback_dispatcher로 다른 도구/모델로 전환 시도
     local fallback_result
-    fallback_result=$("$LIB_DIR/fallback-dispatcher.sh" run "$tool" "$model" "$failure_mode" "$prompt_file" "$worktree" "implement" 2>>"$state_dir/phase-events.log" || echo "")
+    fallback_result=$("$LIB_DIR/fallback-dispatcher.sh" run "$tool" "$model" "$failure_mode" "$prompt_file" "$worktree" "$role" 2>>"$state_dir/phase-events.log" || echo "")
 
     if [ -n "$fallback_result" ] && [[ "$fallback_result" != FAIL:* ]]; then
       log_event "$state_dir" "FALLBACK_USED result=$fallback_result"
@@ -476,34 +484,61 @@ EOF
     return 1
   fi
 
-  local missing_files
-  if missing_files="$(verify_changed_files "$worktree" "$json_path")"; then
-    :
-  else
-    log_event "$state_dir" "CHANGED_FILES_MISMATCH: $missing_files"
-    fail_run "$state_dir" "CHANGED_FILES_MISMATCH" "verdict claimed changed_files not found in actual git diff: $missing_files"
-    return 1
+  if [ "$role" != "review" ]; then
+    local missing_files
+    if missing_files="$(verify_changed_files "$worktree" "$json_path")"; then
+      :
+    else
+      log_event "$state_dir" "CHANGED_FILES_MISMATCH: $missing_files"
+      fail_run "$state_dir" "CHANGED_FILES_MISMATCH" "verdict claimed changed_files not found in actual git diff: $missing_files"
+      return 1
+    fi
+
+    if ! do_safety_check "$worktree" > "$state_dir/safety.log" 2>&1; then
+      fail_run "$state_dir" "SAFETY_VIOLATION" "see safety.log"
+      return 1
+    fi
+
+    if ! "$LIB_DIR/gate-runner.sh" run "$worktree" "$state_dir/gates-$role" "01" >> "$state_dir/phase-events.log" 2>&1; then
+      fail_run "$state_dir" "GATE_FAILED" "see gates-$role/gate-01.log"
+      return 1
+    fi
   fi
 
-  if ! "$LIB_DIR/gate-runner.sh" run "$worktree" "$state_dir/gates-round-1" "01" >> "$state_dir/phase-events.log" 2>&1; then
-    fail_run "$state_dir" "GATE_FAILED" "see gates-round-1/gate-01.log"
-    return 1
-  fi
-
-  if ! do_safety_check "$worktree" > "$state_dir/safety.log" 2>&1; then
-    fail_run "$state_dir" "SAFETY_VIOLATION" "see safety.log"
-    return 1
-  fi
-
-  if [ "$AUTO_COMMIT" = "1" ]; then
+  if [ "$AUTO_COMMIT" = "1" ] && [ "$commit_at_end" = "1" ]; then
     local task_title
     task_title="$(head -1 "$task_md" | sed 's/^#\s*//')"
     do_commit "$worktree" "$state_dir" "$task_title"
     return $?
   else
     echo "pass_no_commit" > "$state_dir/result.txt"
-    notify_macos "kant-looper: pass_no_commit" "quick mode, $tool:$model"
+    notify_macos "kant-looper: pass_no_commit" "quick mode, $role $tool:$model"
     return 0
+  fi
+}
+
+run_quick_chain() {
+  local task_md="$1" state_dir="$2" worktree="$3" agent_chain="$4"
+  local chain_copy="$agent_chain" stage=0
+  local roles=(implement review repair)
+
+  while [ -n "$chain_copy" ]; do
+    local pair="${chain_copy%%,*}"
+    local tool="${pair%%:*}" model="${pair#*:}"
+    [ "$tool" != "$model" ] || { fail_run "$state_dir" "INVALID_CHAIN" "expected tool:model, got $pair"; return 1; }
+    [ "$stage" -lt 3 ] || { fail_run "$state_dir" "INVALID_CHAIN" "quick chain must contain exactly three agents"; return 1; }
+    run_quick_mode "$task_md" "$tool" "$model" "$state_dir" "$worktree" "${roles[$stage]}" 0 || return 1
+    stage=$((stage + 1))
+    if [ "$chain_copy" = "$pair" ]; then chain_copy=""; else chain_copy="${chain_copy#*,}"; fi
+  done
+
+  [ "$stage" = "3" ] || { fail_run "$state_dir" "INVALID_CHAIN" "quick chain requires implement, review, repair"; return 1; }
+  if [ "$AUTO_COMMIT" = "1" ]; then
+    local task_title
+    task_title="$(head -1 "$task_md" | sed 's/^#\s*//')"
+    do_commit "$worktree" "$state_dir" "$task_title"
+  else
+    echo "pass_no_commit" > "$state_dir/result.txt"
   fi
 }
 
@@ -519,25 +554,22 @@ run_parallel_mode() {
     fail_run "$state_dir" "MISSING_CHAIN" "--parallel 모드는 agent_chain이 필요합니다"
     return 1
   fi
-  local route_list="$agent_chain"
-  log "parallel mode: $route_list"
-  log_event "$state_dir" "PARALLEL_CALL chain=$route_list"
+  log "parallel review mode: $agent_chain"
+  log_event "$state_dir" "PARALLEL_REVIEW chain=$agent_chain"
 
   local parallel_dir="$state_dir/parallel"
   mkdir -p "$parallel_dir"
 
-  IFS=',' read -ra pairs <<< "$route_list"
+  IFS=',' read -ra pairs <<< "$agent_chain"
 
-  local i=0
-  local pids=()
-  local role="implement"
+  local i=0 pids=()
   for pair in "${pairs[@]}"; do
     IFS=':' read -ra tm <<< "$pair"
     local tool="${tm[0]}"
     local model="${tm[1]}"
     local slice_id=$((i+1))
 
-    local prompt_file="$parallel_dir/prompt-$role-$slice_id.md"
+    local prompt_file="$parallel_dir/prompt-review-$slice_id.md"
     cat > "$prompt_file" <<EOF
 $(cat "$task_md")
 
@@ -548,8 +580,8 @@ Examples: calculator.py, DONE.md, codex/, opencode/, grok/, agy/
 Forbidden: Desktop/, ~/Desktop/, Users/, C:\
 Agents modify only their own workspace. Do not modify other agent folders.
 
-## 병렬 슬라이스
-이 작업의 일부만 수행하세요. 도구: $tool / 모델: $model / 슬라이스: $slice_id/${#pairs[@]}
+병렬 검토 역할: $tool / 모델: $model / 검토: $slice_id/${#pairs[@]}
+현재 변경을 읽기 전용으로 검토하세요. 파일을 수정하지 마세요.
 
 ## 보고 형식 (반드시 지킬 것)
 너의 응답은 아래 JSON 객체로 응답한다. JSON 바깥에 다른 텍스트를 절대 붙이지 마라.
@@ -575,12 +607,12 @@ EOF
     (
       local adapter="$ADAPTERS_DIR/adapter-${tool}.sh"
       if [ -x "$adapter" ]; then
-        "$adapter" call "$role" "$prompt_file" "$worktree" "$model" \
-          > "$parallel_dir/result-$role-$slice_id.txt" 2>&1
-        echo $? > "$parallel_dir/exit-$role-$slice_id.txt"
+        "$adapter" call "review-$slice_id" "$prompt_file" "$worktree" "$model" \
+          > "$parallel_dir/result-review-$slice_id.txt" 2>&1
+        echo $? > "$parallel_dir/exit-review-$slice_id.txt"
       else
-        echo "ADAPTER_MISSING" > "$parallel_dir/result-$role-$slice_id.txt"
-        echo 1 > "$parallel_dir/exit-$role-$slice_id.txt"
+        echo "ADAPTER_MISSING" > "$parallel_dir/result-review-$slice_id.txt"
+        echo 1 > "$parallel_dir/exit-review-$slice_id.txt"
       fi
     ) &
     pids+=($!)
@@ -601,306 +633,35 @@ EOF
     local model="${tm[1]}"
     local slice_id=$((i+1))
     local exit_code
-    exit_code="$(cat "$parallel_dir/exit-implement-$slice_id.txt" 2>/dev/null || echo "1")"
+    exit_code="$(cat "$parallel_dir/exit-review-$slice_id.txt" 2>/dev/null || echo "1")"
     local result
-    result="$(cat "$parallel_dir/result-implement-$slice_id.txt" 2>/dev/null || echo "no output")"
+    result="$(cat "$parallel_dir/result-review-$slice_id.txt" 2>/dev/null || echo "no output")"
     summary="${summary}${tool}:${model} exit=${exit_code} verdict=${result%%|*}
 "
-    if [ "$exit_code" != "0" ]; then
+    if [ "$exit_code" != "0" ] || [ "${result%%|*}" != "PASS" ]; then
       all_pass=0
     fi
     i=$((i+1))
   done
 
   if [ "$all_pass" != "1" ]; then
-    fail_run "$state_dir" "PARALLEL_FAILED" "one or more agents failed:
-$summary"
+    fail_run "$state_dir" "PARALLEL_REVIEW_FAILED" "one or more reviewers failed:\n$summary\nUse --quick --chain for implementation."
     return 1
   fi
 
-  local all_missing_files=""
-  i=0
-  for pair in "${pairs[@]}"; do
-    local slice_id=$((i+1))
-    local result
-    result="$(cat "$parallel_dir/result-implement-$slice_id.txt" 2>/dev/null || echo "")"
-    local slice_json_path="${result##*|}"
-    local slice_missing
-    if ! slice_missing="$(verify_changed_files "$worktree" "$slice_json_path")"; then
-      all_missing_files="${all_missing_files}[implement-$slice_id] ${slice_missing}"
-    fi
-    i=$((i+1))
-  done
-
-  if [ -n "$all_missing_files" ]; then
-    log_event "$state_dir" "CHANGED_FILES_MISMATCH: $all_missing_files"
-    fail_run "$state_dir" "CHANGED_FILES_MISMATCH" "one or more slices claimed changed_files not found in actual git diff: $all_missing_files"
+  local changed
+  changed="$(git -C "$worktree" status --porcelain --untracked-files=all | grep -Ev '^\?\? (\.kant-looper/|\.omo/run-continuation/|\.codegraph$)' || true)"
+  if [ -n "$changed" ]; then
+    fail_run "$state_dir" "PARALLEL_WRITE_DETECTED" "parallel review changed the worktree; use --quick --chain for implementation"
     return 1
   fi
 
-  if ! "$LIB_DIR/gate-runner.sh" run "$worktree" "$state_dir/gates-round-1" "01" >> "$state_dir/phase-events.log" 2>&1; then
-    fail_run "$state_dir" "GATE_FAILED" "see gates-round-1/gate-01.log"
-    return 1
-  fi
-
-  if ! do_safety_check "$worktree" > "$state_dir/safety.log" 2>&1; then
-    fail_run "$state_dir" "SAFETY_VIOLATION" "see safety.log"
-    return 1
-  fi
-
-  if [ "$AUTO_COMMIT" = "1" ]; then
-    local task_title
-    task_title="$(head -1 "$task_md" | sed 's/^#\s*//')"
-    do_commit "$worktree" "$state_dir" "$task_title"
-    return $?
-  fi
+  echo "pass_no_commit" > "$state_dir/result.txt"
+  notify_macos "kant-looper: parallel review passed" "${#pairs[@]} reviewers"
   return 0
 }
 
 # ---------------------------------------------------------------------------
-# 풀 라운드 (--full 모드, 기본)
-# ---------------------------------------------------------------------------
-
-run_full_mode() {
-  local task_md="$1" state_dir="$2" worktree="$3"
-  local agent_chain="${4:-}"
-
-  if [ -n "$agent_chain" ]; then
-    local plan_agent plan_model impl_agent impl_model review_agent review_model
-    local chain_copy="$agent_chain"
-    local idx=0
-    while [ -n "$chain_copy" ] && [ $idx -lt 3 ]; do
-      local segment="${chain_copy%%,*}"
-      case $idx in
-        0) plan_agent="${segment%%:*}"; plan_model="${segment#*:}" ;;
-        1) impl_agent="${segment%%:*}"; impl_model="${segment#*:}" ;;
-        2) review_agent="${segment%%:*}"; review_model="${segment#*:}" ;;
-      esac
-      if [ "$chain_copy" = "$segment" ]; then
-        chain_copy=""
-      else
-        chain_copy="${chain_copy#*,}"
-      fi
-      idx=$((idx + 1))
-    done
-  else
-    plan_agent="opencode"; plan_model="glm-5.2"
-    impl_agent="agy"; impl_model="gemini-3.5-flash"
-    review_agent="codex"; review_model="gpt-5.6-sol"
-  fi
-
-  local round=1
-  local verdict="CHANGES_REQUESTED"
-
-  while [ $round -le $MAX_ROUNDS ] && [ "$verdict" = "CHANGES_REQUESTED" ]; do
-    log "=== Round $round ==="
-    log_event "$state_dir" "ROUND_START round=$round"
-
-    # (1) plan
-    local plan_prompt="$state_dir/plan-prompt-r${round}.md"
-    cat > "$plan_prompt" <<EOF
-$(cat "$task_md")
-
-## 작업 영역 경로 규칙
-Current working directory is your worktree root: $worktree
-Use only relative paths. Do not recreate the worktree directory.
-Examples: calculator.py, DONE.md, codex/, opencode/, grok/, agy/
-Forbidden: Desktop/, ~/Desktop/, Users/, C:\
-Agents modify only their own workspace. Do not modify other agent folders.
-
-## 보고 형식 (plan role)
-{
-  "verdict": "PASS|CHANGES_REQUESTED|BLOCKED|INVALID_OUTPUT",
-  "summary": "string",
-  "findings": [],
-  "scope": "string",
-  "implementation_steps": ["..."],
-  "acceptance_criteria": ["..."],
-  "verification_commands": ["..."]
-}
-EOF
-
-    local plan_adapter="$ADAPTERS_DIR/adapter-${plan_agent}.sh"
-    local plan_output plan_rc=0
-    if plan_output="$("$plan_adapter" call "plan" "$plan_prompt" "$worktree" "$plan_model" 2>>"$state_dir/phase-events.log")"; then
-      plan_rc=0
-    else
-      plan_rc=$?
-    fi
-    local plan_verdict="${plan_output%%|*}"
-
-    log_event "$state_dir" "ROUND_PLAN verdict=$plan_verdict"
-    [ "$plan_verdict" != "PASS" ] && {
-      fail_run "$state_dir" "PLAN_$plan_verdict" "plan did not pass"
-      return 1
-    }
-
-    # 무진전 감지
-    local np
-    np="$("$LIB_DIR/no-progress-detector.sh" detect "$state_dir" 2>/dev/null || true)"
-    case "$np" in
-      NO_PROGRESS*)
-        fail_run "$state_dir" "NO_PROGRESS" "$np"
-        return 1
-        ;;
-    esac
-
-    # (2) implement
-    local impl_prompt="$state_dir/impl-prompt-r${round}.md"
-    cat > "$impl_prompt" <<EOF
-$(cat "$task_md")
-
-## plan 결과
-$(cat "$state_dir/${plan_agent}-plan.json" 2>/dev/null || echo '{}')
-
-## 작업 영역 경로 규칙
-Current working directory is your worktree root: $worktree
-Use only relative paths. Do not recreate the worktree directory.
-Examples: calculator.py, DONE.md, codex/, opencode/, grok/, agy/
-Forbidden: Desktop/, ~/Desktop/, Users/, C:\
-Agents modify only their own workspace. Do not modify other agent folders.
-
-## 보고 형식 (반드시 지킬 것)
-너의 응답은 아래 JSON 객체로 응답한다. JSON 바깥에 다른 텍스트를 절대 붙이지 마라.
-
-{
-  "verdict": "PASS|CHANGES_REQUESTED|BLOCKED|INVALID_OUTPUT",
-  "summary": "string",
-  "findings": [],
-  "changed_files": ["..."],
-  "tests_added_or_updated": ["..."],
-  "risks": ["..."],
-  "notes_for_reviewer": "string"
-}
-
-마지막 줄에 <verdict>{PASS|CHANGES_REQUESTED|BLOCKED}</verdict> 태그도 함께 출력한다.
-
-## 중요: 재시도 루프 방지
-- 도구를 실행(tool call)한 직후에도 반드시 위에 정의한 JSON 포맷으로 응답을 출력해야 한다.
-- 도구 실행 후 응답을 출력하지 않고 끝나지 마라. 반드시 JSON과 <verdict> 태그를 포함한 응답을 작성해야 한다.
-- retry loop(재시도 루프)가 발생하지 않도록, 한 번의 구현 후 즉시 위 포맷으로 응답을 출력한다.
-EOF
-
-    local impl_adapter="$ADAPTERS_DIR/adapter-${impl_agent}.sh"
-    local impl_output impl_rc=0
-    if impl_output="$("$impl_adapter" call "implement" "$impl_prompt" "$worktree" "$impl_model" 2>>"$state_dir/phase-events.log")"; then
-      impl_rc=0
-    else
-      impl_rc=$?
-    fi
-    local impl_verdict="${impl_output%%|*}"
-
-    log_event "$state_dir" "ROUND_IMPL verdict=$impl_verdict"
-    [ "$impl_verdict" != "PASS" ] && {
-      fail_run "$state_dir" "IMPL_$impl_verdict" "implement did not pass"
-      return 1
-    }
-
-    local impl_json_path="${impl_output##*|}"
-    local impl_missing_files
-    if impl_missing_files="$(verify_changed_files "$worktree" "$impl_json_path")"; then
-      :
-    else
-      log_event "$state_dir" "CHANGED_FILES_MISMATCH: $impl_missing_files"
-      fail_run "$state_dir" "CHANGED_FILES_MISMATCH" "implement verdict claimed changed_files not found in actual git diff: $impl_missing_files"
-      return 1
-    fi
-
-    # (3) gate
-    if ! "$LIB_DIR/gate-runner.sh" run "$worktree" "$state_dir/gates-round-$round" "0$round" >> "$state_dir/phase-events.log" 2>&1; then
-      log_event "$state_dir" "ROUND_GATE FAIL"
-      if [ $round -lt $MAX_ROUNDS ]; then
-        round=$((round+1))
-        continue
-      fi
-      fail_run "$state_dir" "GATE_FAILED" "see gates-round-$round/gate-0$round.log"
-      return 1
-    fi
-
-    # (4) review
-    local review_prompt="$state_dir/review-prompt-r${round}.md"
-    cat > "$review_prompt" <<EOF
-$(cat "$task_md")
-
-## 작업 영역 경로 규칙
-Current working directory is your worktree root: $worktree
-Use only relative paths. Do not recreate the worktree directory.
-Examples: calculator.py, DONE.md, codex/, opencode/, grok/, agy/
-Forbidden: Desktop/, ~/Desktop/, Users/, C:\
-Agents modify only their own workspace. Do not modify other agent folders.
-
-## 변경 사항
-$(cd "$worktree" && git diff --cached --stat 2>/dev/null || echo "no staged diff")
-
-## 보고 형식 (review role)
-{
-  "verdict": "PASS|CHANGES_REQUESTED|BLOCKED|INVALID_OUTPUT",
-  "summary": "string",
-  "findings": [],
-  "required_fixes": ["..."],
-  "evidence": ["..."],
-  "requires_repair_round": true|false,
-  "gate_interpretation": "string",
-  "commit_ready": true|false
-}
-EOF
-
-    local review_adapter="$ADAPTERS_DIR/adapter-${review_agent}.sh"
-    local review_output review_rc=0
-    if review_output="$("$review_adapter" call "review" "$review_prompt" "$worktree" "$review_model" 2>>"$state_dir/phase-events.log")"; then
-      review_rc=0
-    else
-      review_rc=$?
-    fi
-    local review_verdict="${review_output%%|*}"
-
-    log_event "$state_dir" "ROUND_REVIEW verdict=$review_verdict"
-
-    case "$review_verdict" in
-      PASS)
-        if [ "$STRICT_TWO_ROUND_VERIFY" = "0" ] && [ $round -eq 1 ]; then
-          log_event "$state_dir" "SYNTHETIC_VERIFY PASS"
-          break
-        fi
-        if [ $round -lt $MAX_ROUNDS ]; then
-          round=$((round+1))
-          continue
-        fi
-        break
-        ;;
-      CHANGES_REQUESTED)
-        if [ $round -ge $MAX_ROUNDS ]; then
-          fail_run "$state_dir" "MAX_ROUNDS_REACHED" "verdict CHANGES_REQUESTED but MAX_ROUNDS=$MAX_ROUNDS"
-          return 1
-        fi
-        round=$((round+1))
-        continue
-        ;;
-      BLOCKED|INVALID_OUTPUT)
-        fail_run "$state_dir" "REVIEW_$review_verdict" "review did not pass"
-        return 1
-        ;;
-    esac
-
-    verdict="$review_verdict"
-  done
-
-  # (5) safety check
-  if ! do_safety_check "$worktree" > "$state_dir/safety.log" 2>&1; then
-    fail_run "$state_dir" "SAFETY_VIOLATION" "see safety.log"
-    return 1
-  fi
-
-  # (6) commit
-  if [ "$AUTO_COMMIT" = "1" ]; then
-    local task_title
-    task_title="$(head -1 "$task_md" | sed 's/^#\s*//')"
-    do_commit "$worktree" "$state_dir" "$task_title"
-    return $?
-  fi
-  return 0
-}
-
 # ---------------------------------------------------------------------------
 # 서브커맨드: preflight
 # ---------------------------------------------------------------------------
@@ -923,9 +684,8 @@ cmd_preflight() {
 
 cmd_run() {
   local task_md=""
-  local mode="full"
+  local mode="quick"
   local dry_run=0
-  local strict=0
   local no_commit=0
   local detach=0
   local tool=""
@@ -936,9 +696,15 @@ cmd_run() {
     case "$1" in
       --quick) mode="quick" ;;
       --parallel) mode="parallel" ;;
-      --full) mode="full" ;;
+      --full)
+        echo "--full HPRAR 모드는 중단되었습니다. --quick 또는 --quick --chain을 사용하세요." >&2
+        exit 2
+        ;;
       --dry-run) dry_run=1 ;;
-      --strict-verify) strict=1; export STRICT_TWO_ROUND_VERIFY=1 ;;
+      --strict-verify)
+        echo "--strict-verify는 중단된 --full 전용 옵션입니다." >&2
+        exit 2
+        ;;
       --no-auto-commit) no_commit=1; export AUTO_COMMIT=0 ;;
       --detach) detach=1 ;;
       --agent) tool="$2"; shift ;;
@@ -958,7 +724,7 @@ cmd_run() {
   done
 
   if [ -z "$task_md" ]; then
-    echo "usage: kant-loop.sh run TASK.md [--quick|--parallel|--full]" >&2
+    echo "usage: kant-loop.sh run TASK.md [--quick|--parallel]" >&2
     exit 1
   fi
 
@@ -967,13 +733,6 @@ cmd_run() {
     exit 1
   fi
 
-  # --chain 검증: quick 모드 제외 full/parallel만 사용
-  if [ -n "$agent_chain" ] && [ "$mode" = "quick" ]; then
-    echo "--chain은 --parallel 또는 --full 모드에서만 사용할 수 있습니다." >&2
-    exit 1
-  fi
-
-  # parallel 모드는 자동 슬라이싱이 없으므로 --chain 명시 필수
   if [ "$mode" = "parallel" ] && [ -z "$agent_chain" ]; then
     echo "--parallel 모드는 --chain tool:model,tool:model,... 을 명시해야 합니다." >&2
     exit 1
@@ -982,6 +741,7 @@ cmd_run() {
   # --chain 포맷 검증: tool:model,tool:model,...
   if [ -n "$agent_chain" ]; then
     local chain_invalid=0
+    local chain_count=0
     local chain_copy="$agent_chain"
     while [ -n "$chain_copy" ]; do
       local segment="${chain_copy%%,*}"
@@ -990,6 +750,7 @@ cmd_run() {
         chain_invalid=1
         break
       fi
+      chain_count=$((chain_count + 1))
       if [ "$chain_copy" = "$segment" ]; then
         chain_copy=""
       else
@@ -997,6 +758,14 @@ cmd_run() {
       fi
     done
     if [ "$chain_invalid" = "1" ]; then
+      exit 1
+    fi
+    if [ "$mode" = "quick" ] && [ "$chain_count" != "3" ]; then
+      echo "--quick --chain은 implement,review,repair 순서의 정확히 3개 tool:model이 필요합니다." >&2
+      exit 1
+    fi
+    if [ "$mode" = "parallel" ] && [ "$chain_count" -gt "4" ]; then
+      echo "--parallel은 최대 4개 reviewer만 지원합니다." >&2
       exit 1
     fi
     log "chain specified: $agent_chain"
@@ -1010,12 +779,6 @@ cmd_run() {
       case "$mode" in
         quick)
           effective_route="${tool:-codex}:${model:-gpt-5.6-terra}"
-          ;;
-        full)
-          effective_route="chain:opencode:glm-5.2,agy:gemini-3.5-flash,codex:gpt-5.6-sol"
-          ;;
-        *)
-          effective_route="unresolved"
           ;;
       esac
     fi
@@ -1097,13 +860,14 @@ cmd_run() {
 
   case "$mode" in
     quick)
-      run_quick_mode "$task_md" "$tool" "$model" "$state_dir" "$worktree"
+      if [ -n "$agent_chain" ]; then
+        run_quick_chain "$task_md" "$state_dir" "$worktree" "$agent_chain"
+      else
+        run_quick_mode "$task_md" "$tool" "$model" "$state_dir" "$worktree"
+      fi
       ;;
     parallel)
       run_parallel_mode "$task_md" "$state_dir" "$worktree" "$agent_chain"
-      ;;
-    full)
-      run_full_mode "$task_md" "$state_dir" "$worktree" "$agent_chain"
       ;;
   esac
   local rc=$?
@@ -1126,20 +890,18 @@ cmd_run() {
 
 cmd_run_help() {
   cat <<EOF
-kant-loop.sh run TASK.md [--quick|--parallel|--full] [options]
+kant-loop.sh run TASK.md [--quick|--parallel] [options]
 
 옵션:
-  --quick                단일 호출 모드 (가장 가벼움, T0~T1)
-  --parallel             동시 호출 모드 (병렬 머지, T2)
-  --full                 HPRAR 풀 라운드 모드 (기본값, T3~T4)
+  --quick                단일 호출 모드 (기본값), 또는 --chain의 순차 체인
+  --parallel             읽기 전용 동시 검토 모드 (최대 4명)
   --dry-run              환경 검사만, 실제 실행 X
-  --strict-verify        Round 1 review PASS여도 verify 무조건 실행
   --no-auto-commit       검증 PASS여도 commit 안 함 (사용자 결정 대기)
   --detach               백그라운드로 실행
   --agent <tool>         quick 모드에서 사용할 도구 (codex|grok|opencode|agy|claude)
   --model <model>        quick 모드에서 사용할 모델
-  --chain <chain>        명시적 에이전트 체인, tool:model,tool:model,...
-                         (--parallel 모드는 필수, --full 모드는 생략 시 기본 체인 사용)
+  --chain <chain>        tool:model,tool:model,...
+                         (--quick은 implement,review,repair 3개 필수; --parallel은 필수)
 EOF
 }
 
@@ -1163,13 +925,14 @@ _run_mode() {
   local mode="$1" task_md="$2" state_dir="$3" worktree="$4" tool="$5" model="$6" agent_chain="$7"
   case "$mode" in
     quick)
-      run_quick_mode "$task_md" "$tool" "$model" "$state_dir" "$worktree"
+      if [ -n "$agent_chain" ]; then
+        run_quick_chain "$task_md" "$state_dir" "$worktree" "$agent_chain"
+      else
+        run_quick_mode "$task_md" "$tool" "$model" "$state_dir" "$worktree"
+      fi
       ;;
     parallel)
       run_parallel_mode "$task_md" "$state_dir" "$worktree" "$agent_chain"
-      ;;
-    full)
-      run_full_mode "$task_md" "$state_dir" "$worktree" "$agent_chain"
       ;;
   esac
 }
@@ -1566,9 +1329,9 @@ kant-loop.sh — kant-looper 메인 백엔드
 
 서브커맨드:
   preflight [TASK.md]                환경 검사 (사이드 이펙트 없음)
-  run TASK.md [--quick|--parallel|--full] [options]
-                                     작업 실행 (기본 = --full)
-                                     --dry-run, --strict-verify, --no-auto-commit, --detach
+  run TASK.md [--quick|--parallel] [options]
+                                     작업 실행 (기본 = --quick)
+                                     --dry-run, --no-auto-commit, --detach
                                      --agent, --model, --chain
   status --latest | RUN_ID           실행 상태 조회
   await RUN_ID [--timeout N] [--interval N]

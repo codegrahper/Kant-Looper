@@ -48,7 +48,6 @@ glm-5.2
 glm-4.7
 MiniMax-M3
 MiniMax-M2.7
-MiniMax-M2.7-highspeed
 EOF
       ;;
     grok)

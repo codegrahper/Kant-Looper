@@ -31,8 +31,11 @@ scripts/kant-loop.sh run TASK.md --dry-run
 # 가벼운 작업: 단일 도구 한 번 호출
 scripts/kant-loop.sh run TASK.md --quick --agent codex --model gpt-5.6-terra
 
-# 복잡한 작업: plan → implement → gate → review 풀 루프 (기본값)
+# 기본값: 단일 quick 호출
 scripts/kant-loop.sh run TASK.md
+
+# 복잡한 변경: 구현 → 검토 → 수정 순차 체인
+scripts/kant-loop.sh run TASK.md --quick --chain opencode:glm-5.2,codex:gpt-5.6-sol,codex:gpt-5.6-terra
 
 # 실행 상태 확인
 scripts/kant-loop.sh status --latest
@@ -41,7 +44,7 @@ scripts/kant-loop.sh status --latest
 scripts/kant-loop.sh promote agent/kant/<run-id> --target main
 ```
 
-`TASK.md`에는 `## 목표` 또는 `## Goal` 섹션이 반드시 있어야 합니다. `--quick`/`--parallel`/`--full` 모드와 전체 옵션은 [SKILL.md](SKILL.md)를 참고하세요.
+`TASK.md`에는 `## 목표` 또는 `## Goal` 섹션이 반드시 있어야 합니다. `--quick`/`--parallel` 모드와 전체 옵션은 [SKILL.md](SKILL.md)를 참고하세요.
 
 ## 어떤 일을 하는 스크립트인가
 
@@ -106,7 +109,7 @@ INVALID_OUTPUT
 
 문제가 발견되면 수정 계획을 다시 만들고 필요한 부분만 고칩니다. 이후 테스트와 검토를 다시 수행하여 실제로 문제가 해결됐는지 확인합니다.
 
-설계상 전체 모드는 `plan → implement → gate → review`를 수행하고, 수정이 필요하면 `repair-plan → repair → gate → verify`로 이어집니다. 작은 작업은 간단한 quick 모드로 처리할 수 있고, 분리 가능한 작업은 parallel 모드를 사용할 수 있습니다.
+기본 quick 모드는 한 에이전트로 작업합니다. 복잡한 변경은 `--quick --chain`으로 구현 → 검토 → 수정을 한 격리 worktree에서 순차 실행합니다. `--parallel`은 파일을 바꾸지 않는 다중 검토 전용이며, 실제 수정은 quick 체인을 사용합니다.
 
 ## 왜 이름이 ‘Kant’인가
 

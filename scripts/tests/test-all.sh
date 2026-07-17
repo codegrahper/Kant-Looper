@@ -28,11 +28,6 @@ TESTS=(
   "bash scripts/tests/test-python-cache-cleanup.sh"
   "bash scripts/tests/test-fix-apply-e2e.sh"
   "bash scripts/tests/test-await.sh"
-  "bash scripts/tests/test-event-emitter.sh"
-  "bash scripts/tests/test-event-supervisor.sh"
-  "bash scripts/tests/test-dispatcher-store.sh"
-  "bash scripts/tests/test-workflow-start.sh"
-  "bash scripts/tests/test-workflow-autopilot.sh"
   "bash scripts/tests/test-detached-terminal-state.sh"
 )
 
@@ -52,11 +47,6 @@ LABELS=(
   "python-cache-cleanup (커밋 전 pycache 정리)"
   "fix-apply e2e (git 통합)"
   "await 서브커맨드 (--detach 완료 블로킹 대기)"
-  "event completion emitter"
-  "event supervisor claim/recovery/dispatch"
-  "dispatcher completion store and verifier"
-  "workflow start supervisor bootstrap"
-  "workflow autopilot verification and routing"
   "detached terminal-state fallback"
 )
 

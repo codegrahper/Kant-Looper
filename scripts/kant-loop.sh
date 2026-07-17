@@ -86,39 +86,6 @@ notify_macos() {
   fi
 }
 
-emit_terminal_event() {
-  local state_dir="$1"
-  if [ -n "${KANT_DISPATCH_DB:-}" ]; then
-    "$SCRIPT_DIR/dispatcher/record-completion.sh" "$state_dir" "$KANT_DISPATCH_DB" >> "$state_dir/phase-events.log" 2>&1 || log_event "$state_dir" "DISPATCHER_COMPLETION_FAILED"
-  fi
-  local workflow_id
-  workflow_id="$(cat "$state_dir/event-workflow-id.txt" 2>/dev/null || true)"
-  [ -n "$workflow_id" ] || return 0
-
-  local step_id agent model phase
-  step_id="$(cat "$state_dir/event-step-id.txt" 2>/dev/null || true)"
-  agent="$(cat "$state_dir/event-agent.txt" 2>/dev/null || true)"
-  model="$(cat "$state_dir/event-model.txt" 2>/dev/null || true)"
-  phase="$(cat "$state_dir/event-phase.txt" 2>/dev/null || true)"
-  if [ -z "$step_id" ] || [ -z "$agent" ] || [ -z "$model" ] || [ -z "$phase" ]; then
-    log_event "$state_dir" "EVENT_EMIT_SKIPPED missing workflow metadata"
-    return 0
-  fi
-
-  if "$SCRIPT_DIR/event/emit-event.sh" emit \
-    --state-dir "$state_dir" \
-    --event-root "$STATE_ROOT/events" \
-    --workflow-id "$workflow_id" \
-    --step-id "$step_id" \
-    --agent "$agent" \
-    --model "$model" \
-    --phase "$phase" >> "$state_dir/phase-events.log" 2>&1; then
-    log_event "$state_dir" "EVENT_EMITTED workflow=$workflow_id step=$step_id"
-  else
-    log_event "$state_dir" "EVENT_EMIT_FAILED workflow=$workflow_id step=$step_id"
-  fi
-}
-
 # ---------------------------------------------------------------------------
 # fail_run
 # ---------------------------------------------------------------------------
@@ -132,7 +99,6 @@ fail_run() {
     printf '%s' "$message" > "$state_dir/failure-message.txt"
     echo "failed" > "$state_dir/result.txt"
     log_event "$state_dir" "FAIL $code: $message"
-    emit_terminal_event "$state_dir"
   fi
 
   notify_macos "kant-looper: failed" "$code - $message"
@@ -330,7 +296,6 @@ EOF
 
   echo "completed" > "$state_dir/result.txt"
   log_event "$state_dir" "COMMIT $commit_sha"
-  emit_terminal_event "$state_dir"
 
   notify_macos "kant-looper: completed" "$current_branch @ $commit_sha"
 
@@ -547,7 +512,6 @@ EOF
     return $?
   else
     echo "pass_no_commit" > "$state_dir/result.txt"
-    emit_terminal_event "$state_dir"
     notify_macos "kant-looper: pass_no_commit" "quick mode, $role $tool:$model"
     return 0
   fi
@@ -575,7 +539,6 @@ run_quick_chain() {
     do_commit "$worktree" "$state_dir" "$task_title"
   else
     echo "pass_no_commit" > "$state_dir/result.txt"
-    emit_terminal_event "$state_dir"
   fi
 }
 
@@ -694,7 +657,6 @@ EOF
   fi
 
   echo "pass_no_commit" > "$state_dir/result.txt"
-  emit_terminal_event "$state_dir"
   notify_macos "kant-looper: parallel review passed" "${#pairs[@]} reviewers"
   return 0
 }
@@ -729,8 +691,6 @@ cmd_run() {
   local tool=""
   local model=""
   local agent_chain=""
-  local workflow_id=""
-  local workflow_step=""
   local role="implement"
   local existing_worktree=""
 
@@ -747,13 +707,18 @@ cmd_run() {
         echo "--strict-verify는 중단된 --full 전용 옵션입니다." >&2
         exit 2
         ;;
-      --no-auto-commit) no_commit=1; export AUTO_COMMIT=0 ;;
+      --no-auto-commit)
+        no_commit=1
+        # AUTO_COMMIT은 현재 프로세스용, KANT_AUTO_COMMIT은 --detach가 nohup으로
+        # kant-loop.sh를 재실행할 때 스크립트 맨 위(45행)에서 다시 읽는 env var다.
+        # 이것 없이는 detach된 자식이 AUTO_COMMIT을 기본값 1로 재초기화해
+        # --no-auto-commit이 무시된 채 자동 커밋되는 버그가 있었다(2026-07-17 실측).
+        export AUTO_COMMIT=0 KANT_AUTO_COMMIT=0
+        ;;
       --detach) detach=1 ;;
       --agent) tool="$2"; shift ;;
       --model) model="$2"; shift ;;
       --chain) agent_chain="$2"; export KANT_AGENT_CHAIN="$2"; shift ;;
-      --workflow) workflow_id="$2"; shift ;;
-      --step) workflow_step="$2"; shift ;;
       --role) role="$2"; shift ;;
       --existing-worktree) existing_worktree="$2"; shift ;;
       -h|--help) cmd_run_help; exit 0 ;;
@@ -784,14 +749,6 @@ cmd_run() {
     exit 1
   fi
 
-  if [ -n "$workflow_id" ] && [ -z "$workflow_step" ]; then
-    echo "--workflow requires --step" >&2
-    exit 1
-  fi
-  if [ -z "$workflow_id" ] && [ -n "$workflow_step" ]; then
-    echo "--step requires --workflow" >&2
-    exit 1
-  fi
   case "$role" in implement|review|repair) ;; *) echo "invalid role: $role" >&2; exit 1 ;; esac
 
   # --chain 포맷 검증: tool:model,tool:model,...
@@ -871,17 +828,6 @@ cmd_run() {
 
   local branch="$BRANCH_PREFIX/$run_id"
   echo "$branch" > "$state_dir/branch.txt"
-
-  if [ -n "$workflow_id" ]; then
-    local event_agent="${tool:-codex}"
-    local event_model="$model"
-    if [ -z "$event_model" ]; then event_model="$(get_default_model "$event_agent")"; fi
-    printf '%s\n' "$workflow_id" > "$state_dir/event-workflow-id.txt"
-    printf '%s\n' "$workflow_step" > "$state_dir/event-step-id.txt"
-    printf '%s\n' "$event_agent" > "$state_dir/event-agent.txt"
-    printf '%s\n' "$event_model" > "$state_dir/event-model.txt"
-    printf '%s\n' "$role" > "$state_dir/event-phase.txt"
-  fi
 
   log "run_id=$run_id"
   log "state_dir=$state_dir"
@@ -973,26 +919,12 @@ kant-loop.sh run TASK.md [--quick|--parallel] [options]
   --detach               백그라운드로 실행
   --agent <tool>         quick 모드에서 사용할 도구 (codex|grok|opencode|agy|claude)
   --model <model>        quick 모드에서 사용할 모델
-  --workflow <id>        완료 이벤트용 등록 workflow ID (반드시 --step과 함께)
-  --step <id>            완료 이벤트용 현재 workflow step ID
   --role <role>          quick 역할 (implement|review|repair)
-  --existing-worktree D  등록된 기존 worktree 재사용 (Supervisor 전용)
+  --existing-worktree D  등록된 기존 worktree 재사용 (같은 worktree에서 후속 quick 호출을
+                         이어갈 때 클로드가 직접 사용)
   --chain <chain>        tool:model,tool:model,...
                          (--quick은 implement,review,repair 3개 필수; --parallel은 필수)
 EOF
-}
-
-cmd_workflow() {
-  case "${1:-}" in
-    start)
-      shift
-      exec "$SCRIPT_DIR/event/start-workflow.sh" "$@"
-      ;;
-    *)
-      echo "usage: kant-loop.sh workflow start TASK.md --workflow ID [--workflow-file FILE]" >&2
-      exit 2
-      ;;
-  esac
 }
 
 create_worktree() {
@@ -1393,10 +1325,6 @@ case "${1:-}" in
     shift
     cmd_run "$@"
     ;;
-  workflow)
-    shift
-    cmd_workflow "$@"
-    ;;
   status)
     shift
     cmd_status "$@"
@@ -1434,9 +1362,7 @@ kant-loop.sh — kant-looper 메인 백엔드
   run TASK.md [--quick|--parallel] [options]
                                      작업 실행 (기본 = --quick)
                                      --dry-run, --no-auto-commit, --detach
-                                     --agent, --model, --chain
-  workflow start TASK.md --workflow ID
-                                     supervisor + root quick 호출을 자동 시작
+                                     --agent, --model, --chain, --existing-worktree
   status --latest | RUN_ID           실행 상태 조회
   await RUN_ID [--timeout N] [--interval N]
                                      완료까지 블로킹 대기 (하네스 백그라운드 알림 연동)

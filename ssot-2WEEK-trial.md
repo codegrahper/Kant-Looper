@@ -3,13 +3,20 @@
 > `routing-ssot/PHASE-3-5-PLAN.md`의 "Phase 5 진입 조건"을 실제로 추적하는 운영 문서.
 > 이 문서가 관리하는 건 **hardcode 제거(candidate A) 착수 여부를 판단하는 관찰 기간**이다.
 
+## 조기 종료 (2026-07-17)
+
+2주 관찰 시험을 끝까지 채우지 않고 종료함. 이유: SSOT 자동 라우팅 자체를
+걷어내기로 결정 — "어떤 도구/모델을 쓸지 판단"하는 역할을 셸 코드가
+아니라 클로드가 직접 맡는 구조로 전환하기 때문에, SSOT 회귀 관찰이
+더 이상 의미가 없어짐. 상세 배경은 `PLAN-lightweight-kant-looper.md` 참고.
+
 ## 상태
 
 | 항목 | 값 |
 |---|---|
 | 시작일 | 2026-07-16 |
 | 최소 종료일 | 2026-07-30 (14일) |
-| 현재 상태 | 🟡 진행 중 |
+| 현재 상태 | 🔴 조기 종료 (2026-07-17) |
 | 병합된 버전 | main `0da3f1c` (SSOT 라우팅 통합 + self-scan/self-dispatch + await, `Kant-looper-branch`/`routing-ssot-integration` 경유 ff-only 병합) |
 
 ## Phase 5 진입 조건 (PHASE-3-5-PLAN.md 원문)

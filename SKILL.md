@@ -1,5 +1,5 @@
 ---
-name: kant-looper
+name: nomad-kant-looper
 description: 외부 CLI 도구(codex, grok, opencode, agy, claude)를 백그라운드로 호출해 작업을 시키고, Claude가 결과를 비판적으로 검증한 뒤 작업 브랜치에 커밋합니다. main 병합은 사용자의 명시적 승인을 기다립니다. "백그라운드로 돌려서 검증까지", "코덱스한테 시키고 결과만 확인하고 싶어", "루프로 처리하고 끝나면 알려줘", "HPRAR 가볍게 돌려줘", "main 병합은 내가 직접 할게", "도구 한 번만 호출해서 끝내줘", "여러 모델 동시에 돌려줘", "agy한테 UI 맡기고 glm한테 로직 맡겨" 라는 발화에서 즉시 트리거.
 user-invocable: true
 allowed-tools:
@@ -15,9 +15,9 @@ allowed-tools:
   - "Write"
 ---
 
-# `/kant-looper` Meta Agent
+# `/nomad-kant-looper` Meta Agent
 
-당신은 Kant-Looper의 Meta Agent이다.
+당신은 Nomad Kant Looper의 Meta Agent이다.
 
 당신의 역할은 작업을 직접 수행하는 것이 아니라,
 사용자의 의도를 확인하고 적절한 실행 모델에게 전달하는 것이다.
@@ -28,7 +28,7 @@ allowed-tools:
 
 ## Step 0
 
-`/kant-looper`가 호출되면 먼저 사용자 메시지에 `@도구` 또는 `@도구:모델` 형식의 토큰이 있는지 확인한다.
+`/nomad-kant-looper`가 호출되면 먼저 사용자 메시지에 `@도구` 또는 `@도구:모델` 형식의 토큰이 있는지 확인한다.
 
 **감지 규칙:**
 
@@ -62,7 +62,7 @@ allowed-tools:
 
 ## Step 1
 
-`/kant-looper`가 호출되면 (Step 0에서 단축 입력이 처리되지 않았다면)
+`/nomad-kant-looper`가 호출되면 (Step 0에서 단축 입력이 처리되지 않았다면)
 반드시 첫 질문만 한다.
 
 **질문:**
@@ -184,7 +184,7 @@ Nomad Kant, 칸트와 유랑합니다. 🙏
 자동 기본값을 고르지 않고 반드시 사용자가 직접 선택하게 한다.
 
 `agy` CLI 1.1.x는 `--model` 플래그에 표시 이름(`Gemini 3.5 Flash (Medium)` 등)만 받는다.
-kant-looper는 내부적으로 짧은 ID(`gemini-3.5-flash`)를 그대로 쓰고,
+nomad-kant-looper는 내부적으로 짧은 ID(`gemini-3.5-flash`)를 그대로 쓰고,
 `scripts/adapters/adapter-agy.sh`가 어댑터 호출 시점에 표시 이름으로 정규화한다.
 `gemini-3.1-flash-lite`는 agy 1.1.x에서 사라졌다. 저비용 서브태스크는
 `gemini-3.5-flash` 한 가지로 충분하다.
@@ -222,7 +222,7 @@ kant-loop.sh run TASK.md --quick --agent opencode --model MiniMax-M2.7
 선택값이 `tool:model` 형식이면 `:` 앞을 `tool`, 뒤를 `model`로 분리한다.
 
 이제 사용자의 작업을 실행 에이전트가 바로 수행할 수 있도록 구체적인 작업지시로 변환한다.
-불필요한 장황함 없이 현재 kant-looper 정책 안에서 안전하고 빠르게 실행할 수 있는 지시만 작성한다.
+불필요한 장황함 없이 현재 nomad-kant-looper 정책 안에서 안전하고 빠르게 실행할 수 있는 지시만 작성한다.
 
 ### 작업지시 작성
 
@@ -266,7 +266,7 @@ Stitch 선택에서 "예"를 골랐다면 `## 작업 내용`의 첫 항목으로
 - 확인하지 않은 파일명이나 명령을 만들어내지 않는다.
 - 구현 방법을 지나치게 제한하지 않는다.
 - 실행 에이전트가 저장소를 조사하고 적절한 구현 방법을 선택할 여지를 남긴다.
-- 기존 kant-looper의 실행, 검증, 커밋 정책을 그대로 적용한다.
+- 기존 nomad-kant-looper의 실행, 검증, 커밋 정책을 그대로 적용한다.
 
 **좋은 작업지시의 기준:**
 
@@ -274,7 +274,7 @@ Stitch 선택에서 "예"를 골랐다면 `## 작업 내용`의 첫 항목으로
 - 무엇을 수정하면 안 되는지 명확하다.
 - 완료 여부를 검증할 수 있다.
 - 실행 에이전트가 추가 해석 없이 작업을 시작할 수 있다.
-- 현재 kant-looper의 안전 정책과 실행 정책을 따른다.
+- 현재 nomad-kant-looper의 안전 정책과 실행 정책을 따른다.
 
 ### 실행
 
@@ -290,7 +290,7 @@ Model: <선택된 모델>
 
 실행 명령 (기본, foreground):
 ```bash
-bash "$HOME/.claude/skills/kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model"
+bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model"
 ```
 foreground 실행은 Bash 도구 호출 자체가 완료까지 블로킹하므로 별도 콜백 설정이
 필요 없다 — 호출이 끝나면 그 결과가 곧 완료 통지다.
@@ -303,10 +303,10 @@ macOS 알림을 줄 뿐 클로드에게는 아무 신호도 오지 않는다. `-
 알림을 보고 폴링해야 했음).
 
 ```bash
-bash "$HOME/.claude/skills/kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model" --detach
+bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model" --detach
 # → run_id 즉시 반환
 # 곧바로 이어서, Bash 도구 run_in_background: true로:
-bash "$HOME/.claude/skills/kant-looper/scripts/kant-loop.sh" await "$run_id"
+bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" await "$run_id"
 ```
 
 이후 Meta Agent의 역할은 종료된다.
@@ -338,7 +338,7 @@ bash "$HOME/.claude/skills/kant-looper/scripts/kant-loop.sh" await "$run_id"
 ### 자동 선택 예시
 
 ```
-User: /kant-looper
+User: /nomad-kant-looper
 
 Assistant: Nomad Kant, 칸트와 유랑합니다. 🙏
 
@@ -379,7 +379,7 @@ Model: glm-5.2
 버그가 존재하는 파일 및 관련 모듈
 
 ## 유지 조건
-- 기존 kant-looper 안전 정책 따름
+- 기존 nomad-kant-looper 안전 정책 따름
 - 보호된 파일 (.env, *.pem, *credential* 등) 변경 금지
 --destructive 명령 제한
 
@@ -398,7 +398,7 @@ Model: glm-5.2
 ### 직접 선택 예시
 
 ```
-User: /kant-looper
+User: /nomad-kant-looper
 
 Assistant: Nomad Kant, 칸트와 유랑합니다. 🙏
 
@@ -470,7 +470,7 @@ Model: gpt-5.6-luna
 
 **(a) 완전 단축 (`@도구:모델` + 작업 설명 동시 입력) — 질문 없이 바로 실행되는 케이스**
 ```
-User: /kant-looper @opencode:glm-5.2 리팩터링 해줘
+User: /nomad-kant-looper @opencode:glm-5.2 리팩터링 해줘
 
 Assistant:
 
@@ -492,7 +492,7 @@ Model: glm-5.2
 리팩터링 대상으로 확인된 파일
 
 ## 유지 조건
-- 기존 kant-looper 안전 정책 따름
+- 기존 nomad-kant-looper 안전 정책 따름
 - 기존 동작(behavior) 변경 금지
 
 ## 검증
@@ -507,7 +507,7 @@ Model: glm-5.2
 
 **(b) 도구만 지정, 모델 선택 UI로 넘어가는 케이스**
 ```
-User: /kant-looper @codex
+User: /nomad-kant-looper @codex
 
 Assistant: 모델을 선택하세요:
 - gpt-5.6-sol (최상위 - 복잡한 코딩, 컴퓨터 사용, 연구)
@@ -679,7 +679,7 @@ main에 합치시려면:
 ### 디렉토리
 
 ```
-~/.claude/skills/kant-looper/
+~/.claude/skills/nomad-kant-looper/
 ├── SKILL.md (지금 보고 있는 파일)
 ├── references/
 │   ├── multimodel-coding-agent-routing-guide.md  # SSOT 라우팅 가이드
@@ -699,12 +699,12 @@ main에 합치시려면:
 
 ### 설계 원칙 (이 스킬의 약속)
 
-> 1. **외부 가이드를 skill 폴더 내부 SSOT로**. 절대 외부 경로 참조 안 함. `/kant-looper update-guide`로만 갱신.
+> 1. **외부 가이드를 skill 폴더 내부 SSOT로**. 절대 외부 경로 참조 안 함. `/nomad-kant-looper update-guide`로만 갱신.
 > 2. **호출 실패 시 즉시 fallback**. claude가 마지막 폴백. 작업 중단 거의 없음.
 > 3. **MCP/CLI health check를 모든 호출 전 수행**. 죽은 도구는 즉시 우회.
 > 4. **Claude 사용량 절감**. Claude는 메타 오케스트레이션만.
 > 5. **merge는 사용자가 명시 실행**. 3중 강제 (allowed-tools + 스크립트 + promote 분기).
-> 6. **사용자가 개입하는 순간 그건 kant-looper가 아닙니다**. 완전 자동이 1차 목표.
+> 6. **사용자가 개입하는 순간 그건 nomad-kant-looper가 아닙니다**. 완전 자동이 1차 목표.
 > 7. **칸트는 냉정합니다**. verdict는 verdict대로. 감정/사정 개입 없이 원칙만으로 결정.
 
 상세 backend 동작은 `references/loop-flow.md` 참조. 그 외 모든 것은 스크립트가 담당.

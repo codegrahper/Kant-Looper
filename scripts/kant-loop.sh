@@ -374,7 +374,7 @@ validate_agent_model_compatibility() {
 
 run_quick_mode() {
   local task_md="$1" tool="${2:-}" model="${3:-}" state_dir="$4" worktree="$5"
-  local role="${6:-implement}" commit_at_end="${7:-1}"
+  local role="${6:-implement}" commit_at_end="${7:-1}" defer_terminal_result="${8:-0}"
 
   # --agent만 지정되고 --model이 없을 때: agent 기본 모델 자동 선택
   if [ -n "$tool" ] && [ -z "$model" ]; then
@@ -510,11 +510,11 @@ EOF
     task_title="$(head -1 "$task_md" | sed 's/^#\s*//')"
     do_commit "$worktree" "$state_dir" "$task_title"
     return $?
-  else
+  elif [ "$defer_terminal_result" != "1" ]; then
     echo "pass_no_commit" > "$state_dir/result.txt"
     notify_macos "kant-looper: pass_no_commit" "quick mode, $role $tool:$model"
-    return 0
   fi
+  return 0
 }
 
 run_quick_chain() {
@@ -527,7 +527,7 @@ run_quick_chain() {
     local tool="${pair%%:*}" model="${pair#*:}"
     [ "$tool" != "$model" ] || { fail_run "$state_dir" "INVALID_CHAIN" "expected tool:model, got $pair"; return 1; }
     [ "$stage" -lt 3 ] || { fail_run "$state_dir" "INVALID_CHAIN" "quick chain must contain exactly three agents"; return 1; }
-    run_quick_mode "$task_md" "$tool" "$model" "$state_dir" "$worktree" "${roles[$stage]}" 0 || return 1
+    run_quick_mode "$task_md" "$tool" "$model" "$state_dir" "$worktree" "${roles[$stage]}" 0 1 || return 1
     stage=$((stage + 1))
     if [ "$chain_copy" = "$pair" ]; then chain_copy=""; else chain_copy="${chain_copy#*,}"; fi
   done

@@ -295,26 +295,25 @@ bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" run "TASK.md"
 foreground 실행은 Bash 도구 호출 자체가 완료까지 블로킹하므로 별도 콜백 설정이
 필요 없다 — 호출이 끝나면 그 결과가 곧 완료 통지다.
 
-**`--detach`를 쓰는 경우(장시간 작업 등)**: Claude Code에서는 `.claude/settings.json`의
-PostToolUse(Bash) 훅(`scripts/hooks/kant-loop-auto-await.sh`, `asyncRewake: true`)이
-`--detach` 성공 출력의 `kant_hook_marker: kant-loop-detach-v1` 마커를 감지해서
-`await <run_id>`를 자동으로 백그라운드에 걸고, 완료 시 하네스가 클로드를 깨운다.
-클로드가 별도로 `await`를 이어서 호출할 필요는 없다 — `--detach` 실행 후 그 자리에서
-턴을 끝내도 된다.
-
-```bash
-bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model" --detach
-# → run_id 즉시 반환, 이후 await은 훅이 자동으로 처리
-```
-
-훅이 없는 환경(Claude Code 외 하네스, 훅 비활성화 등)에서는 수동으로 이어서
-`await <run_id>`를 Bash 도구의 `run_in_background: true`로 호출해야 완료 시
-알 수 있다(2026-07-17 실측: 훅 도입 전에는 이걸 빠뜨려서 사용자가 직접 macOS
+**`--detach`를 쓰는 경우(장시간 작업 등) 반드시 지킬 것**: `--detach`는 사람에게
+macOS 알림을 줄 뿐 클로드에게는 아무 신호도 오지 않는다. `--detach`로 던진 뒤
+바로 이어서 `await <run_id>`를 Bash 도구의 `run_in_background: true`로 호출해야
+완료 시 하네스가 클로드를 깨운다. `--detach`만 실행하고 후속 `await` 없이
+턴을 끝내면 안 된다(2026-07-17 실측: 이걸 빠뜨려서 사용자가 직접 macOS
 알림을 보고 폴링해야 했음).
 
 ```bash
+bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model" --detach
+# → run_id 즉시 반환
+# 곧바로 이어서, Bash 도구 run_in_background: true로:
 bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" await "$run_id"
 ```
+
+`.claude/settings.json`의 PostToolUse(Bash) 훅(`scripts/hooks/kant-loop-auto-await.sh`,
+`asyncRewake: true`)은 실험적으로 남겨뒀지만 **신뢰할 수 없다고 판명됨**(2026-07-19
+실측: 3회 중 1회 정상 작동, 1회는 kant-loop.sh 자체 버그로 조기 오탐, 1회는 완료·
+커밋까지 됐는데도 원인 불명으로 완전히 침묵). 훅에 의존하지 말고 항상 위 수동
+`await` 패턴을 그 자리에서 실행할 것.
 
 이후 Meta Agent의 역할은 종료된다.
 
@@ -330,7 +329,7 @@ bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" await "$run_i
   - 단축 입력이 무효하면: 정상 두 질문 흐름으로 돌아간다 (무효 안내 한 줄 추가).
 - 추가 확인 질문 금지 (단, 위 모델 선택 UI와 Stitch 선택 UI는 "질문"이 아니라 선택 UI로 취급한다 — 자유 텍스트 질문을 새로 만드는 게 아니라 정해진 선택지를 재사용하는 것이므로 이 금지 규칙의 대상이 아니다).
 - `agy`가 선택되면 반드시 Stitch 사용 여부를 먼저 확인한다. 자동 기본값을 고르지 않는다.
-- `--detach`로 실행했다면 PostToolUse(Bash) 훅이 `await <run_id>`를 자동으로 백그라운드에 걸어준다 — 클로드가 별도로 이어서 호출할 필요 없음. 훅이 없는 환경에서만 수동으로 `await <run_id>`를 background로 이어서 호출한다.
+- `--detach`로 실행했다면 반드시 그 자리에서 바로 `await <run_id>`를 background로 이어서 호출한다. `--detach`만 실행하고 끝내지 않는다.
 - Meta Agent는 작업을 직접 구현하지 않는다.
 - 해결책을 제안하지 않는다.
 - 분석하지 않는다.
@@ -581,26 +580,29 @@ kant-loop.sh run TASK.md --detach
 # → run_id + state-dir 즉시 반환
 # → 완료 시 macOS notification
 
-# 백그라운드 실행 + 하네스 자동 완료 알림 (Claude Code 등)
+# 백그라운드 실행 + 하네스 자동 완료 알림 패턴 (Claude Code 등)
 #   --detach는 사람에게 macOS 알림을 줄 뿐, 에이전트 하네스는
-#   자신이 실행한 명령이 끝날 때만 완료를 안다.
-#
-#   Claude Code에서는 .claude/settings.json의 PostToolUse(Bash) 훅
-#   (scripts/hooks/kant-loop-auto-await.sh, asyncRewake: true)이 이걸
-#   자동으로 처리한다: --detach 호출이 성공하면 stdout의
-#   `kant_hook_marker: kant-loop-detach-v1` + `run_id:` 줄을 감지해서
-#   백그라운드로 `kant-loop.sh await <run_id>`를 돌리고, 완료(성공/
-#   실패/타임아웃) 시 하네스가 클로드를 자동으로 깨운다. 클로드가
-#   await를 별도 background Bash로 감싸는 수동 단계는 더 이상 필요 없다.
+#   자신이 실행한 명령이 끝날 때만 완료를 안다. 다음 조합을 쓰면
+#   하네스 측 자동 알림을 받을 수 있다:
 #
 #   kant-loop.sh run TASK.md --quick --agent codex --model gpt-5.6-luna --detach
-#   # → run_id 반환 즉시, 이후 await은 훅이 자동으로 처리
+#   # → run_id 반환 즉시
 #
-#   훅이 없는 환경(Claude Code 외 하네스, 훅 비활성화 등)에서는 수동으로:
+#   kant-loop.sh await <run_id>
+#   # → 이 명령 자체를 하네스의 백그라운드 실행(Claude Code Bash 도구
+#   #   run_in_background: true)으로 감싸면, 완료 시 하네스가 자동으로
+#   #   알려준다. macOS 알림(--detach 자체가 주는)과는 별개 경로.
+#
 #   kant-loop.sh await <run_id> --timeout 3600 --interval 5
 #   # → run-id의 result.txt가 완료 값을 쓸 때까지 블로킹 폴링.
 #   #   완료 시 status 요약 출력. 성공(completed/pass_no_commit)=0,
 #   #   실패(failed)=1, 타임아웃=2 종료 코드.
+#
+#   .claude/settings.json의 PostToolUse(Bash) 훅
+#   (scripts/hooks/kant-loop-auto-await.sh, asyncRewake: true)은 실험적으로
+#   남겨뒀지만 신뢰할 수 없다고 판명됨(2026-07-19 실측: 3회 중 1회 정상,
+#   1회 kant-loop.sh 버그로 조기 오탐, 1회 원인 불명 침묵). 훅에 의존하지
+#   말고 항상 위 수동 await 패턴을 쓸 것.
 
 # 상태 확인
 kant-loop.sh status --latest

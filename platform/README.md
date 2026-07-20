@@ -24,7 +24,7 @@ Nomad Kant Looper에는 서로 직교하는 두 축이 있다. 이 둘을 섞으
 
 ## 각 파일의 역할
 
-- `platform/claude.md` — Claude Code 런타임에서 Meta Agent를 구동할 때의 설치
+- `platform/claude-runtime.md` — Claude Code 런타임에서 Meta Agent를 구동할 때의 설치
   경로, 백그라운드 실행, 훅 관련 세부 내용을 담는다.
 - `platform/codex.md` — Codex 런타임에서 Meta Agent를 구동할 때의 설치 경로와
   Codex 전용 인터페이스 메타데이터 위치, 그리고 미확정 TODO를 기록한다.

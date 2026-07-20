@@ -289,32 +289,28 @@ Model: <선택된 모델>
 <Task 내용>
 ```
 
+`$SKILL_DIR`는 이 SKILL.md가 설치된 디렉터리의 절대경로다. Runtime별 기본
+설치 위치는 `platform/<runtime>.md`를 참고한다(예: Claude Code는
+`platform/claude-runtime.md`).
+
 실행 명령 (기본, foreground):
 ```bash
-bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model"
+bash "$SKILL_DIR/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model"
 ```
 foreground 실행은 Bash 도구 호출 자체가 완료까지 블로킹하므로 별도 콜백 설정이
-필요 없다 — 호출이 끝나면 그 결과가 곧 완료 통지다.
+필요 없다 — 호출이 끝나면 그 결과가 곧 완료 통지다. 이 동작은 모든 Runtime에서
+동일하다.
 
-**`--detach`를 쓰는 경우(장시간 작업 등) 반드시 지킬 것**: `--detach`는 사람에게
-macOS 알림을 줄 뿐 클로드에게는 아무 신호도 오지 않는다. `--detach`로 던진 뒤
-바로 이어서 `await <run_id>`를 Bash 도구의 `run_in_background: true`로 호출해야
-완료 시 하네스가 클로드를 깨운다. `--detach`만 실행하고 후속 `await` 없이
-턴을 끝내면 안 된다(2026-07-17 실측: 이걸 빠뜨려서 사용자가 직접 macOS
-알림을 보고 폴링해야 했음).
+**`--detach`를 쓰는 경우(장시간 작업 등)**: 백그라운드 실행 지원 여부와 완료를
+확인하는 방법, 알려진 신뢰성 이슈는 Runtime마다 다르다 — `platform/<runtime>.md`
+참고. 기본은 항상 foreground 실행이다.
 
 ```bash
-bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model" --detach
+bash "$SKILL_DIR/scripts/kant-loop.sh" run "TASK.md" --quick --agent "$tool" --model "$model" --detach
 # → run_id 즉시 반환
-# 곧바로 이어서, Bash 도구 run_in_background: true로:
-bash "$HOME/.claude/skills/nomad-kant-looper/scripts/kant-loop.sh" await "$run_id"
+# 완료를 확인하는 방법은 Runtime마다 다르다 — platform/<runtime>.md 참고.
+bash "$SKILL_DIR/scripts/kant-loop.sh" await "$run_id"
 ```
-
-`.claude/settings.json`의 PostToolUse(Bash) 훅(`scripts/hooks/kant-loop-auto-await.sh`,
-`asyncRewake: true`)은 실험적으로 남겨뒀지만 **신뢰할 수 없다고 판명됨**(2026-07-19
-실측: 3회 중 1회 정상 작동, 1회는 kant-loop.sh 자체 버그로 조기 오탐, 1회는 완료·
-커밋까지 됐는데도 원인 불명으로 완전히 침묵). 훅에 의존하지 말고 항상 위 수동
-`await` 패턴을 그 자리에서 실행할 것.
 
 이후 Meta Agent의 역할은 종료된다.
 
@@ -584,29 +580,15 @@ kant-loop.sh run TASK.md --detach
 # → run_id + state-dir 즉시 반환
 # → 완료 시 macOS notification
 
-# 백그라운드 실행 + 하네스 자동 완료 알림 패턴 (Claude Code 등)
-#   --detach는 사람에게 macOS 알림을 줄 뿐, 에이전트 하네스는
-#   자신이 실행한 명령이 끝날 때만 완료를 안다. 다음 조합을 쓰면
-#   하네스 측 자동 알림을 받을 수 있다:
-#
-#   kant-loop.sh run TASK.md --quick --agent codex --model gpt-5.6-luna --detach
-#   # → run_id 반환 즉시
-#
-#   kant-loop.sh await <run_id>
-#   # → 이 명령 자체를 하네스의 백그라운드 실행(Claude Code Bash 도구
-#   #   run_in_background: true)으로 감싸면, 완료 시 하네스가 자동으로
-#   #   알려준다. macOS 알림(--detach 자체가 주는)과는 별개 경로.
+# 백그라운드 실행 + 완료 확인 (Runtime마다 방식이 다름)
+#   --detach는 macOS 알림만 줄 뿐, 완료를 확인하는 구체적인 방법과 알려진
+#   신뢰성 이슈는 Runtime마다 다르다 — platform/<runtime>.md 참고
+#   (예: Claude Code는 platform/claude-runtime.md).
 #
 #   kant-loop.sh await <run_id> --timeout 3600 --interval 5
 #   # → run-id의 result.txt가 완료 값을 쓸 때까지 블로킹 폴링.
 #   #   완료 시 status 요약 출력. 성공(completed/pass_no_commit)=0,
 #   #   실패(failed)=1, 타임아웃=2 종료 코드.
-#
-#   .claude/settings.json의 PostToolUse(Bash) 훅
-#   (scripts/hooks/kant-loop-auto-await.sh, asyncRewake: true)은 실험적으로
-#   남겨뒀지만 신뢰할 수 없다고 판명됨(2026-07-19 실측: 3회 중 1회 정상,
-#   1회 kant-loop.sh 버그로 조기 오탐, 1회 원인 불명 침묵). 훅에 의존하지
-#   말고 항상 위 수동 await 패턴을 쓸 것.
 
 # 상태 확인
 kant-loop.sh status --latest
@@ -695,8 +677,12 @@ main에 합치시려면:
 ### 디렉토리
 
 ```
-~/.claude/skills/nomad-kant-looper/
+$SKILL_DIR/                                       # Runtime별 실제 경로는 platform/<runtime>.md 참고
 ├── SKILL.md (지금 보고 있는 파일)
+├── platform/                                      # Meta Agent Host 축 (Runtime별 UI/설치경로/권한 차이)
+│   ├── claude.md
+│   ├── codex.md
+│   └── opencode.md
 ├── references/
 │   ├── multimodel-coding-agent-routing-guide.md  # SSOT 라우팅 가이드
 │   ├── loop-flow.md                              # 라운드/상태 머신
@@ -707,10 +693,10 @@ main에 합치시려면:
 │   └── agy-cli-notes.md                          # agy(Antigravity) CLI 실전 노트 — sandbox/mode/모델ID 등
 ├── scripts/
 │   ├── kant-loop.sh                              # 메인 백엔드
-│   ├── adapters/                                 # 5개 어댑터 (codex/grok/opencode/agy/claude)
+│   ├── adapters/                                 # Worker Provider 축: 5개 어댑터 (codex/grok/opencode/agy/claude)
 │   ├── lib/                                      # 라이브러리 (health/fallback/model-selector/...)
 │   └── tests/                                    # 시나리오 자동 검증
-└── agents/openai.yaml                            # 인터페이스 메타
+└── agents/openai.yaml                            # Codex 전용 인터페이스 메타
 ```
 
 ### 설계 원칙 (이 스킬의 약속)

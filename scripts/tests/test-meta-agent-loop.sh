@@ -8,7 +8,7 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_LIB="/Users/drumqube/.claude/skills/kant-looper/scripts/lib"
+SKILL_LIB="$(cd "$SCRIPT_DIR/../lib" && pwd)"
 
 declare -i PASS=0 FAIL=0
 

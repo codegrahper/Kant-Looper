@@ -2,7 +2,7 @@
 
 > 각 도구/모델의 fallback 체인. routing 가이드 8·10·11절을 그대로 코드에 옮긴 매핑.
 
-이 표는 **skill 폴더 내부 SSOT**입니다. 절대 외부 경로 참조 안 함. 갱신은 `/kant-looper update-guide` 또는 이 파일 직접 편집.
+이 표는 **skill 폴더 내부 SSOT**입니다. 절대 외부 경로 참조 안 함. 갱신은 `/nomad-kant-looper update-guide` 또는 이 파일 직접 편집.
 
 ## 코드 매핑 (script에서 사용)
 
@@ -178,14 +178,18 @@ no_progress_limits:
 
 ## 가이드 갱신 절차
 
-1. `/Users/drumqube/Downloads/multimodel-coding-agent-routing-guide.md`를 이바가 직접 편집 (또는 외부 출처에서 새로 받음)
-2. `/kant-looper update-guide` 호출
-3. claude가 diff 표시 → 이바 승인
+1. `$HOME/Downloads/multimodel-coding-agent-routing-guide.md`(`KANT_EXTERNAL_GUIDE_PATH`로 오버라이드 가능)를 사용자가 직접 편집 (또는 외부 출처에서 새로 받음)
+2. `/nomad-kant-looper update-guide` 호출
+3. Meta Agent가 diff 표시 → 사용자 승인
 4. 클로드가 `references/multimodel-coding-agent-routing-guide.md`에 복사
-5. claude가 `references/fallback-table.md`도 새 가이드에 맞춰 업데이트 제안 (이바가 한 번 더 승인)
+5. Meta Agent가 `references/fallback-table.md`도 새 가이드에 맞춰 업데이트 제안(사용자가 한 번 더 승인)
 6. 다음 작업부터 새 매핑 자동 적용
 
-코드 자체는 가이드 파일을 동적 파싱하므로 직접 수정 불필요. 단 fallback-table.md 자체는 직접 편집 가능 (가이드 외에 운영 노하우 포함).
+`references/fallback-table.md`는 사람이 읽는 참고 문서일 뿐이다. 실제
+폴백 체인은 `scripts/lib/fallback-dispatcher.sh`의 하드코딩된
+`KANT_FALLBACK_CHAINS_LINEAR` 배열이 정의한다. 이 표를 고쳐도 실제 동작은
+바뀌지 않는다 — 동작을 바꾸려면 `fallback-dispatcher.sh`를 직접 수정해야
+한다. Code is authoritative, documentation is descriptive.
 
 ## 환경별 기본값 오버라이드
 

@@ -1339,7 +1339,7 @@ cmd_cleanup() {
 # ---------------------------------------------------------------------------
 
 cmd_update_guide() {
-  local external_guide="/Users/drumqube/Downloads/multimodel-coding-agent-routing-guide.md"
+  local external_guide="${KANT_EXTERNAL_GUIDE_PATH:-$HOME/Downloads/multimodel-coding-agent-routing-guide.md}"
   local internal_guide="$REFERENCES_DIR/multimodel-coding-agent-routing-guide.md"
 
   if [ ! -f "$external_guide" ]; then

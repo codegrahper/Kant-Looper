@@ -1,6 +1,6 @@
 # safety-promises.md
 
-> kant-looper가 자동으로 하지 않는 것 + 안전 약속 전체 목록. SKILL.md 본문에는 5줄 요약만, 상세는 이 문서에.
+> nomad-kant-looper가 자동으로 하지 않는 것 + 안전 약속 전체 목록. SKILL.md 본문에는 5줄 요약만, 상세는 이 문서에.
 
 ## 자동으로 하지 않는 것 (절대 금지)
 
@@ -88,6 +88,13 @@ chmod 777 /etc/*
 iptables -F
 ```
 
+이 검사는 `safety-check.sh self-test`가 스크립트 소스 코드를 정적으로
+grep하는 방식이다 — 즉 **"이런 명령이 코드에 존재하지 않는다"는 구조적 보장**이지, 실행 중인 Worker의 변경 내용을 실시간으로 가로채 차단하는
+전용 인터셉터가 아니다. 반면 protected paths(#5)와 forbidden patterns(#6)는
+`check_protected_paths`/`check_forbidden_patterns`가 실제 변경 내용을
+검사해 위반 시 실패시키는 **능동 차단**이다. 이 둘을 같은 수준의 보장으로
+혼동하지 않는다. 상세: `platform/HOST-CONTRACT.md` §5.
+
 ### 10. 외부 API 키 입력 금지
 
 `.env`, SSH 키, 클라우드 자격증명, 쿠키는 모델 입력에 절대 넣지 않음.
@@ -102,8 +109,8 @@ touch "$EMPTY_HOOKS_DIR/.gitkeep"
 
 git -c core.hooksPath="$EMPTY_HOOKS_DIR" \
     -c commit.gpgSign=false \
-    -c user.name="kant-looper" \
-    -c user.email="kant-looper@local" \
+    -c user.name="nomad-kant-looper" \
+    -c user.email="nomad-kant-looper@local" \
     commit -F "$RUN_STATE_DIR/commit-message.txt"
 
 rm -rf "$EMPTY_HOOKS_DIR"
@@ -119,7 +126,7 @@ rm -rf "$EMPTY_HOOKS_DIR"
 notify_final() {
   local result="$1" detail="$2"
   if [ "$NOTIFY" = "1" ] && [ "$NOTIFY_OSASCRIPT" = "1" ]; then
-    osascript -e "display notification \"$detail\" with title \"kant-looper: $result\" sound name \"Funk\""
+    osascript -e "display notification \"$detail\" with title \"nomad-kant-looper: $result\" sound name \"Funk\""
   fi
   # dedup: 같은 detail은 1회만 발사 (.notification-${event}.sent marker)
 }

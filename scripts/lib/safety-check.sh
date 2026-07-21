@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # safety-check.sh — protected paths / forbidden patterns 검사
 #
-# kant-looper의 안전 약속을 강제. 자동 push/merge/rebase/reset 안 됨.
+# nomad-kant-looper의 안전 약속을 강제. 자동 push/merge/rebase/reset 안 됨.
 # staged diff와 unstaged 변경 모두 검사.
 #
 # bash 3.2 호환.

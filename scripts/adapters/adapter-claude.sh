@@ -5,7 +5,7 @@
 #        --tools <tools> --effort <effort>
 # 완료 감지: exit code + stdout JSON
 
-# kant-looper의 "최종 폴백"이자 "사용자가 명시적으로 claude 호출" 케이스용.
+# nomad-kant-looper의 "최종 폴백"이자 "사용자가 명시적으로 claude 호출" 케이스용.
 # 이 어댑터가 마지막 폴백이므로 실패 시 더 이상 fallback 없음.
 #
 # claude는 구독 로그인(OAuth) 상태 그대로 호출. MiniMax의 Anthropic-호환

@@ -32,8 +32,8 @@ create_test_repo() {
   mkdir -p "$dir"
   (cd "$dir" && {
     git init -q
-    git config user.email "test@kant-looper"
-    git config user.name "kant-looper-test"
+    git config user.email "test@nomad-kant-looper"
+    git config user.name "nomad-kant-looper-test"
     echo "# Test" > README.md
     git add README.md
     git commit -m "init" -q
@@ -227,7 +227,7 @@ scenario_smoke() {
 
 # 메인
 main() {
-  log "kant-looper 시나리오 검증 시작"
+  log "nomad-kant-looper 시나리오 검증 시작"
   log "skill root: $SKILL_ROOT"
   log ""
 

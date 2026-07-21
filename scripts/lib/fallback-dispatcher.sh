@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fallback-dispatcher.sh — 호출 실패 시 다른 도구/모델로 즉시 전환
 #
-# 이 스크립트가 kant-looper의 "이바가 개입하는 순간 그것은 kant-looper가 아닙니다" 약속을 지킴.
+# 이 스크립트가 nomad-kant-looper의 "사용자가 개입하는 순간 그것은 nomad-kant-looper가 아닙니다" 약속을 지킴.
 # 어떤 도구/모델이 죽어도 작업은 claude까지 자동으로 이어짐.
 #
 # bash 3.2 호환.
@@ -9,7 +9,7 @@
 set -Eeuo pipefail
 
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FALLBACK_LOG="${KANT_FALLBACK_LOG:-${KANT_STATE_DIR:-$HOME/.claude/state/kant-looper}/fallback.log}"
+FALLBACK_LOG="${KANT_FALLBACK_LOG:-${KANT_STATE_ROOT:-$HOME/.claude/state/nomad-kant-looper}/fallback.log}"
 
 # ---------------------------------------------------------------------------
 # Fallback 체인 정의 (references/fallback-table.md와 동기)

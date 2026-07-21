@@ -36,7 +36,7 @@ analyze() {
   local analysis_prompt_file
   analysis_prompt_file="$(mktemp -t kant-analysis-XXXXXX)"
   cat > "$analysis_prompt_file" <<PROMPTEOF
-You are a senior Bash/shell engineer analyzing a failure in kant-looper (a multi-model AI coding orchestrator).
+You are a senior Bash/shell engineer analyzing a failure in nomad-kant-looper (a multi-model AI coding orchestrator).
 
 Your job: identify the ROOT CAUSE of the failure and propose a MINIMAL FIX.
 

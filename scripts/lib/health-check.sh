@@ -2,7 +2,7 @@
 # health-check.sh — CLI/MCP 도구 연결 상태 점검
 #
 # 모든 외부 도구 호출 *전에* 실행. 죽은 도구는 즉시 우회하고 fallback_dispatch.
-# kant-looper의 "안전하고 정확하고 빠름"의 "안전"을 책임지는 첫 단계.
+# nomad-kant-looper의 "안전하고 정확하고 빠름"의 "안전"을 책임지는 첫 단계.
 #
 # bash 3.2 호환 (macOS 기본 bash).
 
@@ -111,7 +111,7 @@ available_tools() {
 
 preflight_check() {
   local log_path="${1:-/dev/null}"
-  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] kant-looper preflight starting" | tee -a "$log_path"
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] nomad-kant-looper preflight starting" | tee -a "$log_path"
   echo "Tools:" | tee -a "$log_path"
   health_check_all | tee -a "$log_path"
   echo "" | tee -a "$log_path"

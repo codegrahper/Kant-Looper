@@ -1,6 +1,6 @@
 ---
 name: nomad-kant-looper
-description: 외부 CLI 도구(codex, grok, opencode, agy, claude)를 백그라운드로 호출해 작업을 시키고, Meta Agent가 결과를 비판적으로 검증한 뒤 작업 브랜치에 커밋합니다. main 병합은 사용자의 명시적 승인을 기다립니다. "백그라운드로 돌려서 검증까지", "코덱스한테 시키고 결과만 확인하고 싶어", "루프로 처리하고 끝나면 알려줘", "HPRAR 가볍게 돌려줘", "main 병합은 내가 직접 할게", "도구 한 번만 호출해서 끝내줘", "여러 모델 동시에 돌려줘", "agy한테 UI 맡기고 glm한테 로직 맡겨" 라는 발화에서 즉시 트리거.
+description: 외부 CLI 도구(codex, grok, opencode, agy, claude)를 백그라운드로 호출해 작업을 시키고, Meta Agent가 결과를 비판적으로 검증한 뒤 작업 브랜치에 커밋합니다. main 병합은 사용자의 명시적 승인을 기다립니다. "백그라운드로 돌려서 검증까지", "코덱스한테 시키고 결과만 확인하고 싶어", "루프로 처리하고 끝나면 알려줘", "체인으로 검토까지 돌려줘", "main 병합은 내가 직접 할게", "도구 한 번만 호출해서 끝내줘", "여러 모델 동시에 돌려줘", "agy한테 UI 맡기고 glm한테 로직 맡겨" 라는 발화에서 즉시 트리거.
 user-invocable: true
 allowed-tools:
   - "Bash(scripts/kant-loop.sh:*)"

@@ -1,7 +1,7 @@
 ﻿# 멀티모델 코딩 에이전트·도구 호출 라우팅 가이드
 
 - 기준일: 2026-07-18
-- 대상: kant-looper가 실제로 호출하는 5개 도구(codex, opencode, grok, agy, claude)와
+- 대상: nomad-kant-looper가 실제로 호출하는 5개 도구(codex, opencode, grok, agy, claude)와
   그 안에서 SKILL.md Step 2로 실제 선택 가능한 모델만 다룬다. 시장 전체 모델
   서베이가 아니다.
 - 이 문서는 참고 자료다 — 어떤 스크립트도 이 표를 파싱해서 강제하지 않는다.

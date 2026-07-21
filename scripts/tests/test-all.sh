@@ -155,7 +155,7 @@ if [ "${#RUN_TESTS[@]}" -eq 0 ]; then
   exit 0
 fi
 
-echo "kant-looper 전체 회귀 테스트"
+echo "nomad-kant-looper 전체 회귀 테스트"
 echo "  (SKILL_ROOT=$SKILL_DIR)"
 echo "  $(printf '%s' "${RUN_TESTS[@]}" | wc -w | tr -d ' ') tests selected"
 printf '\n'

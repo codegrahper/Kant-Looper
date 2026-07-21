@@ -72,8 +72,8 @@ fallback_chain_final: claude:default
 
 documentation:
   - SKILL.md
-  - references/loop-flow.md
-  - references/verdict-schema.md
+  - references/archive/hprar/loop-flow.md
+  - references/archive/hprar/verdict-schema.md
   - references/safety-promises.md
-  - references/failure-modes.md
+  - references/archive/hprar/failure-modes.md
   - references/fallback-table.md

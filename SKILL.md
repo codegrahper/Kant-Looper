@@ -646,13 +646,13 @@ kant-loop.sh cleanup --apply
 
 인증 실패 / timeout / rate limit / 형식 오류 / 네트워크 에러 — 모든 실패 모드에 즉시 대응. **claude가 마지막 폴백**이라 작업이 중단되는 일은 거의 없음.
 
-상세: `references/failure-modes.md`, `references/fallback-table.md`
+상세: `references/archive/hprar/failure-modes.md`, `references/fallback-table.md`
 
 ### 무진전 감지 + 자동 중단
 
 routing 가이드 10.2 정책 기반. 같은 diff 3회 / 같은 테스트 실패 2회 / 10회 도구 호출 동안 변화 없음 → 자동 중단.
 
-상세: `references/failure-modes.md` §무진전 감지
+상세: `references/archive/hprar/failure-modes.md` §무진전 감지
 
 ### 작업 보고 형식
 
@@ -709,4 +709,4 @@ $SKILL_DIR/                                       # Runtime별 실제 경로는 
 > 6. **사용자가 개입하는 순간 그건 nomad-kant-looper가 아닙니다**. 완전 자동이 1차 목표.
 > 7. **칸트는 냉정합니다**. verdict는 verdict대로. 감정/사정 개입 없이 원칙만으로 결정.
 
-상세 backend 동작은 `references/loop-flow.md` 참조. 그 외 모든 것은 스크립트가 담당.
+상세 backend 동작은 `references/archive/hprar/loop-flow.md` 참조. 그 외 모든 것은 스크립트가 담당.

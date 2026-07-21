@@ -9,6 +9,78 @@
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-07-21 — Runtime Contract & Conformance
+
+v0.6.0("몸통이 없다")의 agent-agnostic 선언을 **검증 가능한 계약**으로 못박는
+릴리스. 맥스(Codex) 제안 문서를 두 감사 에이전트로 검증한 뒤, 실제 구현은
+`kant-loop.sh`로 워커(codex:gpt-5.6-sol, opencode:glm-5.2)에게 위임해 칸트루퍼
+자체를 라이브 도그푸딩했다. 각 stage는 칸트(Meta Agent)가 TASK.md 작성 → 워커
+위임 → diff·테스트 직접 검증 → dev 반영. 워커 커밋에 섞인 `.kant-looper/` 실행
+로그는 매번 제외하고 의도한 파일만 반영.
+
+### Host Contract v1 (Stage 1, 워커: codex:gpt-5.6-sol)
+
+- **`platform/HOST-CONTRACT.md` 신설** (`e5d0235`): Meta Agent Host가 되기 위한
+  6개 최소 계약을 실제 코드 앵커와 함께 명세 — skill 발견 / `$SKILL_DIR` 해석 /
+  사용자 선택(graceful degradation) / 백엔드 호출 / 인간 주권·안전 경계 /
+  완료 확인.
+- 계약 5(안전 경계)는 "구조적 보장(파괴적 op가 자동 경로에 없음)"과 "능동 차단
+  (`safety-check.sh`의 protected-path/secret 검사)"을 명확히 구분 — 없는 능동
+  차단기를 있다고 과장하지 않음.
+- 칸트 검증: 인용된 함수 11종·서브커맨드 전부 실제 코드에 존재함을 grep 교차 확인.
+
+### `status`/`report --json` (Stage 2, 워커: codex:gpt-5.6-sol)
+
+- **런타임 중립 JSON 출력 추가** (`1b4e36d`): `cmd_status`/`cmd_report`에 `--json`
+  플래그. `$state_dir`의 기존 flat 파일을 python3 `json.dump`로 직렬화(이스케이프
+  안전, 신규 데이터 수집 없음). `--json` 없으면 기존 출력 100% 불변.
+- 회귀 테스트 `test-status-report-json.sh` 신설, `test-all.sh` 등록.
+- 칸트 검증: 실물 run으로 `status`/`report --json`이 `python3 -m json.tool` 통과,
+  기본 출력 불변 확인.
+
+### Runtime Conformance Suite + 백엔드 갭 수리 (Stage 3, 워커: codex:gpt-5.6-sol)
+
+- **`scripts/tests/runtime-conformance/` 3종 신설** (`171fc5f`): 백엔드에서 관측
+  가능한 계약 속성을 결정적으로 검증(외부 CLI 호출 없음, `--dry-run`·정적 grep·
+  격리 git repo만). check-direct-routing(provider 임의 변경 없음), check-task-contract
+  (목표 없는 TASK 거부), check-safety-contract(push 부재/merge는 ff-only만/promote
+  completed 게이트/protected path 차단). 각 검사에 음성 케이스 포함.
+- **도그푸딩이 실제 백엔드 버그를 발견·수리**: codex가 conformance를 돌리다
+  "`cmd_run`의 `--dry-run` 분기가 `validate_task_md`보다 먼저 exit 0 하여 목표
+  섹션 없는 TASK가 dry-run에서 통과한다"는 계약 위반을 정직하게 `CHANGES_REQUESTED`로
+  보고. `validate_task_md`를 dry-run 분기 앞으로 이동해 dry-run·실제 실행 모두
+  목표 섹션을 강제하도록 수정(칸트, Task-Failure repair).
+- 검증: 수리 전 task-contract 2 FAIL → 수리 후 4 PASS(테스트가 실제 위반을
+  잡음을 증명). `test-all.sh` 21 PASS/0 FAIL.
+
+### Platform Capability Matrix + frontmatter 결정 (Stage 4, 워커: opencode:glm-5.2)
+
+- **capability 표 추가** (`e7ab707`): `platform/claude-runtime·codex·opencode.md`에
+  7개 capability 등급 표. 이번 세션 실측된 것만 native — Claude Code는 7개 전부
+  native, Codex/OpenCode는 발견·구조화 UI·$SKILL_DIR·foreground native, background·
+  wake-up·permission은 `검증필요`로 정직하게 남김(추측 없음). 세 런타임을 억지로
+  동일 등급으로 만들지 않음.
+- **frontmatter 이식성 결정**: `user-invocable`/`allowed-tools`를 SKILL.md에 그대로
+  유지 — 세 런타임 모두 unknown 필드를 무시하고 정상 실행함이 관측됨. config
+  generation 시스템 안 만듦(YAGNI).
+
+### 하지 않은 것 (제안 문서와 동일)
+
+- HPRAR/`--full` 부활, 자동 dispatcher 부활, Routing SSOT 2.0, MCP 전환 목표화 —
+  전부 폐기 결정 유지. 세 런타임 기능 100% 동일 강제 안 함(차이 명시 + 핵심 계약만 동일).
+
+## [0.6.1] — 2026-07-21 — 문서 정합성 패치 (워커: opencode:glm-5.2)
+
+v0.6.0 이후 확인된 문서 드리프트 정리(코드 변경 없음). Stage 0 도그푸딩.
+
+- **문서 드리프트 4종 정리** (`5399313`, 담당: opencode:glm-5.2, 검증: 칸트):
+  - `platform/codex.md`: Codex 설치를 "독립 clone(예정)"에서 "이미 worktree(완료)"로
+    현실화 — v0.6.0 `install.sh --agent codex`로 전환 완료된 사실 반영.
+  - `CHANGELOG` 버전정책: 1.0 조건에서 이미 삭제된 `--full` 제거(`--parallel` 유지).
+  - `references/loop-flow`·`failure-modes`·`verdict-schema`: 폐기된 HPRAR 상태
+    모델 문서에 "낡은 문서" 경고 배너 추가(내용은 역사적 기록으로 보존).
+  - `platform/README`: `no-progress-detector.sh` 삭제 여부는 v0.7에서 결정 노트.
+
 ## [0.6.0] — 2026-07-21 — Nomad Kant Looper 정체성 확립 + Agent-agnostic Stage 1
 
 ### MANIFESTO 문구 정정 — Human Sovereignty + "왜 몸통이 없는가" (2026-07-21)

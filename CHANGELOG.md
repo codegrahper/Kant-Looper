@@ -9,6 +9,113 @@
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-07-21 — Portable Runtime Hardening
+
+v0.7.0(Host Contract 정의)을 실제로 닫는 릴리스. 새 오케스트레이션 기능을
+더하지 않고, 문서상 portable였던 것을 실측·수리·회귀 테스트로 검증된 portable로
+바꾼다. 맥스(Codex)가 웹에서 저장소를 조사해 작성한 0.8 제안 문서를 두 감사
+에이전트로 검증한 뒤, 5개 phase를 워커(codex:gpt-5.6-sol, opencode:glm-5.2)에게
+위임해 도그푸딩으로 진행. 각 phase는 칸트가 TASK.md 작성 → 위임 → diff·테스트
+직접 검증 → dev 반영.
+
+### Phase 1 — Active Metadata Drift 제거 (`ce708e3`, 워커: opencode:glm-5.2)
+
+- `agents/openai.yaml`: name/display_name/version을 nomad-kant-looper·0.8.0으로,
+  "Claude가 검증" 서술을 "Meta Agent가 검증"으로, "이바" 참조 제거, `full`/HPRAR
+  모드 항목 삭제(이미 코드에서 제거된 기능이 메타데이터에 기본값처럼 남아있던
+  드리프트)
+- `references/fallback-table.md`: "코드가 가이드 파일을 동적 파싱한다"는 허위
+  주장 삭제 — 실제 폴백 체인은 `fallback-dispatcher.sh`의 하드코딩 배열이 정의함을
+  명시. Code is authoritative, documentation is descriptive 원칙으로 재서술
+- `references/safety-promises.md`: destructive-commands 거부가 능동 차단이 아니라
+  "그런 호출이 코드에 없다"는 구조적 보장임을 `platform/HOST-CONTRACT.md` §5와
+  일치하게 명시. 예시 코드의 `user.name`/notify title을 실제 코드와 일치시킴
+- `scripts/kant-loop.sh`: `cmd_update_guide()`의 하드코딩된 개인 절대경로를
+  `${KANT_EXTERNAL_GUIDE_PATH:-$HOME/Downloads/...}`로 파라미터화(이 한 줄만)
+- 검증: 개인 경로 잔존 0건, 구 이름 잔존 0건, `test-all.sh` 21 PASS
+
+### Phase 2 — parallel role/slice_id 재발 버그 수리 (`d82f634`, 워커: codex:gpt-5.6-sol)
+
+- **살아있던 잠재 버그 발견**: `run_parallel_mode`(`kant-loop.sh:610`)가 여전히
+  어댑터 호출 role 인자에 `"review-$slice_id"`를 넘기고 있었다 — 2026-07-17에
+  `59b187a`로 이미 고쳤던 것과 정확히 같은 role/slice_id 혼합 패턴의 재발.
+  어댑터의 기본 분기가 우연히 read-only에 가까워 지금까지 겉으로 안 터졌을 뿐인
+  잠재 위험이었다
+- 어댑터 호출 줄 딱 한 곳만 수리: role은 순수 `"review"`로, slice_id는 파일명에만
+- 새 회귀 테스트 `test-parallel-role-purity.sh`: 3개 mock worker로 role이 항상
+  순수한지 검증. **자가 증명**: 버그를 임시 재현한 코드로 돌리면 3/3 FAIL,
+  수리된 코드로 2/2 PASS 확인 후 원복
+- 검증: `test-all.sh` 22 PASS
+
+### Phase 3 — JSON schema_version + commit/commit_sha 통일 (`4d251c8`, 워커: codex:gpt-5.6-sol)
+
+- `status`/`report --json` 양쪽 다 `schema_version: 1` 추가
+- `status`는 `commit`만, `report`는 `commit_sha`만 노출하던 비대칭을 없애고
+  양쪽 다 두 키(같은 값의 별칭) 노출 — 기존 env var 재사용, 새 플러밍 없음
+- 기존 `test-status-report-json.sh`에 assertion 추가(구조는 그대로)
+- 검증: 실물 run으로 `schema_version=1`, `commit==commit_sha` 눈으로 확인.
+  `test-all.sh` 22 PASS
+
+### Phase 4 — Dead code 삭제 + HPRAR 문서 아카이브 (`69b677f`, 워커: opencode:glm-5.2)
+
+- `scripts/lib/no-progress-detector.sh` 삭제(v0.6.1부터 "결정 보류"로 남아있던
+  죽은 코드 — 어디서도 호출되지 않음을 재확인 후 v0.8에서 삭제 확정)
+- 폐기된 HPRAR 상태 모델 문서 3종(`loop-flow.md`, `failure-modes.md`,
+  `verdict-schema.md`)을 `git mv`로 `references/archive/hprar/`로 이동(히스토리
+  보존, 내용 무변경 — R100 확인). 새 `references/archive/hprar/README.md`로
+  역사적 기록임을 명시
+- `SKILL.md`·`agents/openai.yaml`·routing-guide.md의 경로 참조 갱신.
+  **CHANGELOG.md는 각 시점의 역사적 기록이라 의도적으로 손대지 않음**
+- 검증: "낡은 문서" 배너 3개 보존 확인, 깨진 경로 참조 0건, `test-all.sh` 22 PASS
+
+### Phase 5a — PARALLEL_WRITE_DETECTED 회귀 테스트 (`5c683c7`, 워커: codex:gpt-5.6-sol)
+
+- `run_parallel_mode`에 이미 구현돼 있던 zero-write 안전장치(`kant-loop.sh:655`,
+  reviewer가 실제로 파일을 쓰면 PASS verdict여도 실패 처리)를 검증하는 테스트가
+  지금까지 하나도 없었던 것을 신설. **`kant-loop.sh`는 전혀 수정하지 않음** —
+  이미 있는 동작에 대한 테스트 추가만
+- 새 `test-parallel-zero-write.sh`: 3개 mock worker 중 하나가 실제로 파일을
+  쓰면 `PARALLEL_WRITE_DETECTED`로 실패하고 `pass_no_commit`으로 둔갑하지
+  않는지 검증. **자가 증명**: mock의 쓰기 동작을 `MOCK_DISABLE_WRITE=1`로
+  끄면 정확히 3/3 FAIL(테스트가 실제 메커니즘에 의존함을 증명)
+- 검증: `test-all.sh` 23 PASS
+
+### Phase 5b — 라이브 fault-injection 폴백 증명 (`a306ce5`, 칸트 직접 실행)
+
+- grok이 사용량 제한으로 라이브 테스트 불가하다는 확인에 따라 codex를 대상으로
+  실제 fault-injection 수행. 항상 실패하는 가짜 `codex` 바이너리를 스크래치
+  디렉터리에 만들어 **단 한 번의 호출에서만** `PATH` 맨 앞에 배치(실제 codex
+  설치나 전역 환경은 전혀 안 건드림)
+- **실측된 실제 흐름** (`fallback.log`/`phase-events.log` 그대로):
+  ```
+  10:15:15 QUICK_CALL codex:gpt-5.6-sol → ADAPTER_FAIL INFRA_ERROR rc=201
+  10:15:15 fallback 진입: chain=codex:gpt-5.6-terra,opencode:glm-5.2,
+           agy:gemini-3.5-flash,grok:grok-4.5,claude:default
+  10:15:20 attempt codex:gpt-5.6-terra → FAIL rc=201 (같은 가짜 codex)
+  10:15:25 attempt opencode:glm-5.2 → 실제 라이브 호출 시작
+  10:16:05 SUCCESS opencode:glm-5.2 (약 40초 — 실제 원격 LLM 호출 소요시간)
+  10:16:06 COMMIT 0b1eeef8
+  ```
+- 같은 도구(codex)가 두 모델 다 연속 실패해도 fallback-dispatcher가 다른 도구로
+  정상 전환해 실제로 완주함을 라이브로 확인. 증거:
+  `references/archive/live-fault-injection-evidence-v0.8.md`
+
+### 하지 않은 것
+
+- HPRAR/`--full` 부활, 자동 dispatcher 부활, Routing SSOT 2.0, 범용 config
+  generator, MCP abstraction 추가 — 전부 폐기 결정 유지
+- Codex/OpenCode의 background 실행·완료 wake-up·permission 모델 capability
+  실측 — 이번 범위 밖, "검증필요"로 유지(dev worktree로는 실측 불가, 각 런타임
+  세션에서 직접 확인해야 함)
+- grok 라이브 재검증 — 현재 사용량 제한으로 보류(대신 codex를 fault-injection
+  대상으로 사용)
+- 모든 런타임 기능 100% 동일화 — 차이는 정직하게 "검증필요"로 남김(Nomad 철학)
+
+### 검증 (전체)
+
+`scripts/tests/test-all.sh` 23개 스위트 전부 PASS(0.7.0의 21개 + Phase 2/5a
+신규 2개). 각 phase 커밋에서 회귀 확인.
+
 ## [0.7.0] — 2026-07-21 — Runtime Contract & Conformance
 
 v0.6.0("몸통이 없다")의 agent-agnostic 선언을 **검증 가능한 계약**으로 못박는

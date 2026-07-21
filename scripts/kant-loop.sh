@@ -1043,11 +1043,13 @@ if Path(events_path.parent, "failure-code.txt").is_file():
 
 json.dump(
     {
+        "schema_version": 1,
         "run_id": os.environ["KANT_JSON_RUN_ID"],
         "result": os.environ["KANT_JSON_RESULT"],
         "branch": optional("KANT_JSON_BRANCH"),
         "worktree": optional("KANT_JSON_WORKTREE"),
         "commit": optional("KANT_JSON_COMMIT"),
+        "commit_sha": optional("KANT_JSON_COMMIT"),
         "failure": failure,
         "recent_events": events,
     },
@@ -1154,11 +1156,13 @@ if Path(safety_path.parent, "failure-code.txt").is_file():
 
 json.dump(
     {
+        "schema_version": 1,
         "run_id": os.environ["KANT_JSON_RUN_ID"],
         "result": os.environ["KANT_JSON_RESULT"],
         "branch": optional("KANT_JSON_BRANCH"),
         "worktree": optional("KANT_JSON_WORKTREE"),
         "commit_sha": optional("KANT_JSON_COMMIT_SHA"),
+        "commit": optional("KANT_JSON_COMMIT_SHA"),
         "reviewed_tree": optional("KANT_JSON_REVIEWED_TREE"),
         "committed_tree": optional("KANT_JSON_COMMITTED_TREE"),
         "failure": failure,

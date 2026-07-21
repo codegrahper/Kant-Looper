@@ -49,10 +49,12 @@ import sys
 
 with open(sys.argv[1]) as stream:
     data = json.load(stream)
+assert data["schema_version"] == 1
 assert data["run_id"] == "json-test-run"
 assert data["result"] == "completed"
 assert data["branch"] == "agent/kant/json-test-run"
 assert data["commit"] == "abc123"
+assert data["commit_sha"] == "abc123"
 assert data["recent_events"] == [f'event {n} "quoted"' for n in range(3, 13)]
 PY
 
@@ -66,6 +68,8 @@ import sys
 
 with open(sys.argv[1]) as stream:
     data = json.load(stream)
+assert data["schema_version"] == 1
+assert data["commit"] == data.get("commit_sha")
 assert data["reviewed_tree"] == "reviewed456"
 assert data["committed_tree"] == "committed789"
 assert data["safety_log"] == [f"safety {n}" for n in range(1, 11)]
@@ -96,6 +100,7 @@ assert data["result"] == "running"
 assert data["branch"] is None
 assert data["worktree"] is None
 assert data["commit"] is None
+assert data["commit_sha"] is None
 assert data["failure"] is None
 assert data["recent_events"] == []
 PY
@@ -105,7 +110,7 @@ import sys
 
 with open(sys.argv[1]) as stream:
     data = json.load(stream)
-for field in ("branch", "worktree", "commit_sha", "reviewed_tree", "committed_tree", "failure"):
+for field in ("branch", "worktree", "commit_sha", "commit", "reviewed_tree", "committed_tree", "failure"):
     assert data[field] is None
 assert data["safety_log"] == []
 PY

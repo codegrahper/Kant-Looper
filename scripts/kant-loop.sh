@@ -63,6 +63,18 @@ log() {
 log_event() {
   local state_dir="$1" event="$2"
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $event" >> "$state_dir/phase-events.log"
+  kant_observe "$state_dir" || true
+}
+
+# 관찰성 계약(Phase 1): phase-events.log 를 소스로 run-state.json + events.jsonl 재생성.
+# Dashboard 전용 machine-readable 뷰. 절대 Core 실행을 방해하지 않는다(실패 무시).
+# KANT_OBSERVE_DISABLE 로 끌 수 있다(성능 측정/테스트용).
+kant_observe() {
+  local state_dir="$1"
+  [ -n "${KANT_OBSERVE_DISABLE:-}" ] && return 0
+  [ -d "$state_dir" ] || return 0
+  python3 "$LIB_DIR/state_writer.py" "$state_dir" >/dev/null 2>&1 || true
+  return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -512,6 +524,7 @@ EOF
     return $?
   elif [ "$defer_terminal_result" != "1" ]; then
     echo "pass_no_commit" > "$state_dir/result.txt"
+    log_event "$state_dir" "RUN_PASS_NO_COMMIT"
     notify_macos "nomad-kant-looper: pass_no_commit" "quick mode, $role $tool:$model"
   fi
   return 0
@@ -539,6 +552,7 @@ run_quick_chain() {
     do_commit "$worktree" "$state_dir" "$task_title"
   else
     echo "pass_no_commit" > "$state_dir/result.txt"
+    log_event "$state_dir" "RUN_PASS_NO_COMMIT"
   fi
 }
 
@@ -861,6 +875,12 @@ cmd_run() {
     fail_run "$state_dir" "UNREGISTERED_WORKTREE" "cwd is not registered in git worktree list: $worktree_realpath"
     exit 1
   fi
+
+  # 관찰성 계약 메타(Phase 1): run-state.json 조립에 필요한 값. RUN_CREATED 가 최초 스냅샷을 생성한다.
+  printf '%s' "$mode" > "$state_dir/mode.txt"
+  printf '%s' "$repo" > "$state_dir/repo.txt"
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$state_dir/started-at.txt"
+  log_event "$state_dir" "RUN_CREATED"
 
   if [ "$detach" = "1" ]; then
     log "detach mode — running in background"

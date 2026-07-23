@@ -44,7 +44,39 @@ scripts/kant-loop.sh status --latest
 scripts/kant-loop.sh promote agent/kant/<run-id> --target main
 ```
 
-`TASK.md`에는 `## 목표` 또는 `## Goal` 섹션이 반드시 있어야 합니다. `--quick`/`--parallel` 모드와 전체 옵션은 [SKILL.md](SKILL.md)를 참고하세요.
+`TASK.md`에는 `## 목표` 또는 `## Goal` 섹션이 반드시 있어야 합니다. 위 예시의 `TASK.md`는 편의상 쓴 이름이고, 실제 운영 시에는 `TASK-<slug>.md`(예: `TASK-dashboard-phase3-mvp.md`)처럼 파일명만 보고 무슨 작업인지 알 수 있게 짓습니다 — 같은 `TASK.md` 하나를 매번 덮어쓰지 않습니다. 자세한 규칙은 [SKILL.md](SKILL.md)의 "TASK 파일 이름 규칙"을 참고하세요. `--quick`/`--parallel` 모드와 전체 옵션도 [SKILL.md](SKILL.md)를 참고하세요.
+
+## Dashboard 사용법
+
+터미널에서 `kant-loop.sh run`(위 명령들 그대로)으로 작업을 실행하면서, 지금
+어느 단계인지·어떤 도구가 일하는지·verdict가 뭔지를 눈으로 보고 싶다면
+Kant Dashboard를 쓸 수 있습니다. **읽기전용**입니다 — Dashboard에서 직접 run을
+시작하는 기능은 아직 없고(Phase 4 예정), 터미널에서 실행한 run을 자동으로
+감지해서 보여주기만 합니다.
+
+```bash
+# 최초 1회 — venv 생성 + 의존성 설치
+cd kant-looper-dev
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r dashboard/server/requirements.txt
+
+# 기동 (저장소 루트에서 — repo_hash가 pwd 기준)
+source .venv/bin/activate
+python3 -m uvicorn dashboard.server.main:app --host 127.0.0.1 --port 7419
+```
+
+브라우저에서 `http://127.0.0.1:7419`로 접속하면 됩니다. **세션을 시작한다고
+자동으로 열리지 않습니다** — 위 명령으로 직접 기동해야 하고, 다 쓰면
+`pkill -f "uvicorn dashboard.server.main"`으로 종료하면 됩니다. 서버는
+`127.0.0.1`에만 bind하며(`0.0.0.0` 아님), Dashboard가 죽어도 진행 중인
+`kant-loop.sh run`은 영향받지 않습니다 — 반대로 실행 중인 run이 죽어도
+Dashboard 서버는 계속 떠 있습니다.
+
+기동해 둔 채로 다른 터미널에서 평소처럼 `scripts/kant-loop.sh run TASK-*.md`를
+실행하면, Dashboard가 해당 run을 자동으로 목록에 감지하고 진행 상황·verdict·
+Activity를 실시간으로 보여줍니다. 자세한 아키텍처와 API는
+[docs/dashboard/](docs/dashboard/)를 참고하세요.
 
 ## 어떤 일을 하는 스크립트인가
 

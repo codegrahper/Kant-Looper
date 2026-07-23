@@ -9,6 +9,85 @@
 
 ## [Unreleased]
 
+### Kant Dashboard Phase 0–3 — Standalone Read-only Dashboard
+
+Kant Core(`kant-loop.sh`)는 다시 만들지 않고, 그 위에 얇은 관찰·시각화 계층만
+얹는다는 원칙 아래 진행. 역할 분리: **Kant Core = Brain / dashboard/server =
+Bridge / dashboard/web = Eyes**. Phase 3 완료 지점에서 한 번 평가하기로 계획돼
+있었고(`docs/dashboard/*.md` 참고), 지금은 그 지점 — 여기서 멈춰도 Core엔
+`run-state.json`/`events.jsonl`이라는 순수 개선물만 남는다.
+
+- **Phase 0 — Scope Freeze** (`1d99cbb`, 직접 작업: 이바 + Claude Opus 4.8,
+  kant-loop.sh 위임 아님)
+  - `docs/dashboard/ARCHITECTURE.md`, `STATE-CONTRACT.md`, `API.md`,
+    `UI-SCOPE.md` — Brain/Bridge/Eyes 경계와 `run-state.json`/`events.jsonl`
+    스키마 v1, API 초안, UI 정보 구조 확정.
+
+- **Phase 1 — Observability Contract** (`1d99cbb`, 직접 작업, 같은 커밋)
+  - `scripts/lib/state_writer.py` 신규 — `phase-events.log`를 단일 소스로
+    `run-state.json`(atomic write) + `events.jsonl`(append-only)을 재생성.
+  - `kant-loop.sh`: `log_event` 확장 + 관찰성 메타 파일 훅(순수 20줄 추가,
+    삭제 0 — 엔진 로직 무변경). 관찰성 실패는 `|| true`로 격리해 Core 실행에
+    영향 없음. 기존 `phase-events.log`·flat 상태 파일은 그대로 유지.
+  - 검증: `state_writer` 단위 29/29, 기존 회귀 스위트 23/23, full-run 통합
+    13/13.
+
+- **Phase 2 — Local Server** (`04cc3af`, 워커: `opencode:glm-5.2`,
+  run: `task-20260722-140017-0f64`)
+  - `dashboard/server/` 신규 — FastAPI, 읽기전용 GET 5개 엔드포인트
+    (`/api/health`, `/api/runs`, `/api/runs/{id}`, `/api/runs/{id}/events`,
+    `/api/runs/{id}/stream` SSE). `127.0.0.1` 전용 bind(`config.HOST` 하드코딩,
+    CLI로도 우회 불가).
+  - 검증: 칸트가 직접 curl로 5개 엔드포인트 확인, 깨진 `run-state.json`을
+    실제로 주입해 malformed 격리(500 없이 해당 run만 `error`) 확인, 이 위임
+    작업 자체의 `run-state.json` 자기참조 확인.
+
+- **Phase 3 — Read-only Dashboard MVP**
+  - 디자인 시안 3개 (`c1dd17b`, 워커: `agy:gemini-3.1-pro-preview`,
+    run: `task-20260722-235625-0732`): `dashboard/web/design-drafts/draft-1~3.html`
+    — Classic IDE / Kanban / Bento Grid, 각각 light/dark 지원. Stitch MCP
+    사용을 지시했으나 로그·verdict에 사용 흔적이 없어 확인 불가로 남았고,
+    이바가 Stitch에서 직접 3개 시안을 만들어 확인한 뒤 draft-2(정보 밀도)와
+    draft-3(비주얼 톤)을 합치도록 지시.
+  - draft-4 합성 (`5e063f6`, 워커: `agy:gemini-3.1-pro-preview`,
+    run: `task-20260723-015123-5852`): 각 파이프라인 카드에 agent/model/verdict/
+    findings를 인라인으로 보여주는 draft-2 구조 + draft-3의 카드 톤. 확정 시안.
+  - 실제 API 연동 MVP (`e49e6d9`, 워커: `agy:gemini-3.1-pro-preview`,
+    run: `task-20260723-020351-6fe0`): `dashboard/web/index.html` 신규,
+    `dashboard/server/main.py`에 정적 파일 서빙 최소 추가(`/api/*` 라우트
+    무변경). mock이 아닌 실제 `GET /api/runs`·`/api/runs/{id}`·SSE로 동작.
+    파이프라인 카드는 `agents[]` 길이만큼 동적 렌더링(고정 칸수 없음), system
+    처리 단계(엔진 내부 로직)와 실제 AI 실행 단계를 시각적으로 구분, Inspector는
+    카드와 같은 정보를 반복하지 않고 선택한 stage의 이벤트 로그만 보여줌 —
+    이바의 draft-2 리뷰 지적사항 반영.
+  - 반응형 레이아웃 수정 (`4b29deb`, 워커: `agy:gemini-3.1-pro-preview`,
+    run: `task-20260723-024225-6ce8`): 3컬럼 고정폭이 ~1400px 미만에서
+    깨지던 문제(제목 잘림·컬럼 겹침)를 CSS만으로 수정, 1440px 이상 기존
+    스타일·JS 로직 무변경.
+  - 검증: Phase 3 전체를 칸트가 실제로 서버 기동 후 브라우저(723px/1024px/
+    1440px, light/dark)로 직접 렌더링 확인. 클릭 인터랙션은 좌표 스케일링
+    문제로 첫 시도가 빗나갔던 것을 JS 직접 호출과 정확한 bounding-rect
+    좌표로 재확인.
+
+모두 `kant-loop.sh promote ... --target Kant-looper-branch`로 ff-only 병합.
+**main 병합은 아직 하지 않음** — 사용자 명시 승인 대기.
+
+### TASK 파일 이름 운영 원칙 도입 (문서 전용, 코드 변경 없음)
+
+- 작업지시 파일을 `TASK.md` 하나로 매번 덮어쓰던 관행 대신, `TASK-<slug>.md`
+  형태로 사람이 파일명만 보고 무슨 작업인지 구분할 수 있게 하는 운영 원칙을
+  도입. `<slug>` 규칙은 기존 `task_to_slug()`(`kant-loop.sh:150-158`)와 통일.
+- 작업지시 첫 줄 제목도 `# Task`처럼 뭉뚱그리지 않고 구체적으로 쓰도록 명시 —
+  `run_id` slug가 이 제목에서 자동 생성되므로, 제목이 뭉뚱그려지면 `status`나
+  Dashboard 실행 목록에서 모든 run이 "Task"로만 보이는 문제가 있었음(Kant
+  Dashboard Phase 3 MVP 도그푸딩 중 실사용에서 발견).
+- **코드 변경 없음**: `cmd_run`은 이미 임의 파일 경로를 인자로 받고 있었다
+  (`kant-loop.sh:741-742`) — `TASK.md`라는 고정 이름은 문서 관행이었을 뿐,
+  스크립트가 강제한 적이 없었다.
+- 반영 문서: `SKILL.md`(Step 3 "TASK 파일 이름 규칙" 신설, Rules·Example·
+  Technical Reference 예시 갱신), `README.md`("빠른 시작" 절), `.gitignore`
+  (`TASK-*.md`류 스크래치 파일이 실수로 커밋되지 않도록 패턴 추가).
+
 ## [0.8.0] — 2026-07-21 — Portable Runtime Hardening
 
 v0.7.0(Host Contract 정의)을 실제로 닫는 릴리스. 새 오케스트레이션 기능을

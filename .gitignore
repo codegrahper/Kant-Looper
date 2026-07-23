@@ -7,3 +7,11 @@ scripts/lib/target.sh
 
 # OpenCode 세션 런타임 상태
 .omo/run-continuation/*.json
+
+# Dashboard 로컬 venv
+.venv/
+dashboard/**/__pycache__/
+
+# 작업지시 스크래치 파일 (TASK-<slug>.md 운영 원칙 — SKILL.md 참고)
+/TASK.md
+/TASK-*.md

@@ -1,12 +1,26 @@
 {
   "verdict": "PASS",
-  "summary": "draft-2의 상세한 인라인 정보 구조(agent 이름, model, verdict, findings 등)와 draft-3의 Bento Grid 및 시각적 디테일(둥근 모서리, 여백, 그림자, 다크모드 대응 등)을 성공적으로 병합하여 draft-4.html을 생성했습니다.",
+  "summary": "Kant Dashboard Phase 3 읽기전용 MVP 구현 완료",
   "findings": [],
   "changed_files": [
-    "dashboard/web/design-drafts/draft-4.html"
+    "dashboard/server/main.py",
+    "dashboard/web/index.html"
   ],
   "tests_added_or_updated": [],
   "risks": [],
-  "notes_for_reviewer": "요청하신 대로 기존 파일을 수정하지 않고 draft-4.html만 신규 생성했습니다. Bento Grid 레이아웃 내부에 draft-2 방식의 카드 정보를 통합하여 가시성을 유지했으며, light/dark 모드를 완벽히 지원합니다."
+  "notes_for_reviewer": "요청하신 대로 dashboard/server/main.py 마지막 부분에 FastAPI StaticFiles를 마운트하여 / 경로에서 dashboard/web/ 디렉토리를 서비스하도록 수정했습니다. 기존 API와 보호 정책은 그대로 유지됩니다. 추가로 생성된 dashboard/web/index.html은 빌드 단계 없이 작동하는 단일 파일이며, 실시간 SSE 연결 및 Inspector 중복 방지, 그리고 events.jsonl 및 agents 배열을 분석해 System 단계와 AI 단계를 시각적으로 명확히 분리하여 렌더링하도록 구현했습니다."
+}
+<verdict>PASS</verdict>
+{
+  "verdict": "PASS",
+  "summary": "Kant Dashboard Phase 3 읽기전용 MVP 구현 완료",
+  "findings": [],
+  "changed_files": [
+    "dashboard/server/main.py",
+    "dashboard/web/index.html"
+  ],
+  "tests_added_or_updated": [],
+  "risks": [],
+  "notes_for_reviewer": "요청하신 대로 dashboard/server/main.py 마지막 부분에 FastAPI StaticFiles를 마운트하여 / 경로에서 dashboard/web/ 디렉토리를 서비스하도록 수정했습니다. 기존 API와 보호 정책은 그대로 유지됩니다. 추가로 생성된 dashboard/web/index.html은 빌드 단계 없이 작동하는 단일 파일이며, 실시간 SSE 연결 및 Inspector 중복 방지, 그리고 events.jsonl 및 agents 배열을 분석해 System 단계와 AI 단계를 시각적으로 명확히 분리하여 렌더링하도록 구현했습니다."
 }
 <verdict>PASS</verdict>

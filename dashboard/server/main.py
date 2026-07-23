@@ -139,6 +139,12 @@ async def run_stream(run_id: str):
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")
 
+from fastapi.staticfiles import StaticFiles
+web_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
+if os.path.exists(web_dir):
+    app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
+
+
 
 def main():
     """`python3 -m dashboard.server.main` 진입점. 127.0.0.1 전용 bind."""

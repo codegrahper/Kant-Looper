@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kant Dashboard</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f3f4f6;
+    --card-bg: #ffffff;
+    --text: #1f2937;
+    --text-sub: #6b7280;
+    --border: #e5e7eb;
+    --radius: 12px;
+    
+    --c-success: #10b981;
+    --c-running: #0ea5e9;
+    --c-failed: #ef4444;
+    --c-waiting: #9ca3af;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #030712;
+      --card-bg: #111827;
+      --text: #f9fafb;
+      --text-sub: #9ca3af;
+      --border: #1f2937;
+      
+      --c-success: #34d399;
+      --c-running: #38bdf8;
+      --c-failed: #f87171;
+      --c-waiting: #6b7280;
+    }
+  }
+
+  body { margin: 0; padding: 1.5rem; font-family: "Inter", system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; box-sizing: border-box; }
+  
+  .dashboard { display: grid; grid-template-columns: 320px 1fr 320px; grid-template-rows: auto 1fr; gap: 1.5rem; height: 100%; }
+  
+  .card { background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 1.5rem; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); }
+  .card h2 { margin: 0 0 1.25rem 0; font-size: 1.05rem; color: var(--text); display: flex; justify-content: space-between; align-items: center; }
+  
+  /* Top Bar */
+  .top-bar { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; background: var(--card-bg); border-radius: var(--radius); border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+  .top-bar h1 { margin: 0; font-size: 1.3rem; }
+  
+  /* Run List */
+  .run-list { grid-column: 1; grid-row: 2; overflow-y: auto; padding: 1rem; }
+  .run-entry { padding: 1.25rem; border-radius: 8px; margin-bottom: 0.75rem; border: 1px solid var(--border); cursor: pointer; transition: all 0.2s; }
+  .run-entry:hover { background: var(--bg); }
+  .run-entry.active { border-color: var(--c-running); background: #0ea5e90a; }
+  .run-entry h3 { margin: 0 0 0.5rem 0; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center; }
+  .run-entry p { margin: 0; font-size: 0.8rem; color: var(--text-sub); display: flex; justify-content: space-between; }
+  .badge { font-size: 0.65rem; background: var(--border); padding: 0.1rem 0.4rem; border-radius: 4px; color: var(--text); }
+  .badge.legacy { background: #f59e0b; color: #fff; }
+  
+  /* Pipeline Center */
+  .pipeline-view { grid-column: 2; grid-row: 2; overflow-y: auto; }
+  
+  .pipeline-steps { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
+  
+  .step-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; display: flex; flex-direction: column; transition: transform 0.15s, box-shadow 0.15s; cursor: pointer; }
+  .step-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+  .step-card.active-inspector { border-color: var(--text); }
+  
+  .step-card.success { border-left: 4px solid var(--c-success); }
+  .step-card.failed { border-left: 4px solid var(--c-failed); }
+  .step-card.running { border-left: 4px solid var(--c-running); }
+  .step-card.waiting { opacity: 0.6; border-left: 4px solid var(--border); }
+  
+  .step-card.system-step { padding: 0.8rem; background: transparent; border-style: dashed; opacity: 0.8; }
+  .step-card.system-step .agent-info { display: none; }
+  
+  .step-header { display: flex; justify-content: space-between; font-weight: 600; font-size: 0.85rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; margin-bottom: 0.75rem; color: var(--text-sub); }
+  .step-card.system-step .step-header { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+  
+  .step-header .icon.success { color: var(--c-success); }
+  .step-header .icon.running { color: var(--c-running); }
+  .step-header .icon.waiting { color: var(--text-sub); }
+  .step-header .icon.failed { color: var(--c-failed); }
+  
+  .agent-info { display: flex; flex-direction: column; margin-bottom: 1.25rem; }
+  .agent-name { font-weight: bold; font-size: 0.95rem; color: var(--text); }
+  .agent-model { font-size: 0.75rem; color: var(--text-sub); margin-top: 0.25rem; }
+  
+  .verdict-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; font-weight: 600; }
+  .step-card.system-step .verdict-row { display: none; }
+  
+  .verdict-row .status.success { color: var(--c-success); }
+  .verdict-row .status.running { color: var(--c-running); }
+  .verdict-row .status.waiting { color: var(--text-sub); }
+  .verdict-row .status.failed { color: var(--c-failed); }
+  
+  /* Activity Log */
+  .activity-log { flex: 1; border-top: 1px solid var(--border); padding-top: 1rem; overflow-y: auto; max-height: 300px;}
+  .log-line { font-family: ui-monospace, monospace; font-size: 0.85rem; padding: 0.5rem 0; border-bottom: 1px dashed var(--border); display: flex; gap: 1rem; }
+  .log-line .ts { width: 80px; color: var(--text-sub); flex-shrink: 0; }
+  .log-line .event { width: 140px; font-weight: 600; color: var(--c-running); flex-shrink: 0; }
+  .log-line .msg { color: var(--text); word-break: break-all; }
+  
+  /* Inspector */
+  .inspector { grid-column: 3; grid-row: 2; overflow-y: auto; }
+  .inspector-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .inspector-logs { font-family: ui-monospace, monospace; font-size: 0.8rem; background: #000; color: #fff; padding: 1rem; border-radius: 8px; overflow-y: auto; max-height: 100%; white-space: pre-wrap; word-wrap: break-word;}
+  
+  .error-block { background: var(--c-failed); color: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+  <div class="dashboard">
+    <div class="top-bar">
+      <h1>Kant Dashboard</h1>
+      <div id="topBarInfo" style="font-size: 0.9rem; color: var(--text-sub); display: flex; gap: 2rem;">
+        <span><strong>Task:</strong> -</span>
+        <span><strong>ID:</strong> -</span>
+        <span><strong>Branch:</strong> -</span>
+      </div>
+    </div>
+    
+    <div class="card run-list">
+      <h2>Runs</h2>
+      <div id="runListContainer">Loading...</div>
+    </div>
+    
+    <div class="card pipeline-view">
+      <h2>Pipeline Status <span id="pipelineProgress" style="font-size: 0.9rem; font-weight: normal; color: var(--text-sub); background: var(--bg); padding: 0.2rem 0.6rem; border-radius: 99px;">0/0</span></h2>
+      
+      <div id="errorContainer"></div>
+      
+      <div class="pipeline-steps" id="pipelineStepsContainer">
+        <!-- Rendered dynamically -->
+      </div>
+      
+      <h2 style="margin-top: 1rem;">Activity Feed</h2>
+      <div class="activity-log" id="activityFeed">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+    
+    <div class="card inspector">
+      <div class="inspector-header">
+        <h2 style="margin:0;">Inspector</h2>
+        <span id="inspectorStageName" class="badge" style="display:none;"></span>
+      </div>
+      <div id="inspectorContent" style="display: flex; flex-direction: column; gap: 1rem;">
+        <p style="color: var(--text-sub); font-size: 0.9rem;">Select a stage to view its events and details.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api';
+    const STAGE_ORDER = ["preflight", "routing", "worktree", "plan", "implement", "gate", "review", "repair", "verify", "commit", "done"];
+    
+    let state = {
+      runs: [],
+      currentRunId: null,
+      currentRunData: null,
+      events: [],
+      selectedStage: null,
+      eventSource: null
+    };
+
+    async function fetchRuns() {
+      try {
+        const res = await fetch(`${API_BASE}/runs`);
+        if (!res.ok) throw new Error('Failed to fetch runs');
+        state.runs = await res.json();
+        renderRunList();
+        
+        if (state.runs.length > 0 && !state.currentRunId) {
+          selectRun(state.runs[0].run_id);
+        }
+      } catch (err) {
+        document.getElementById('runListContainer').innerHTML = `<div style="color:red">Error: ${err.message}</div>`;
+      }
+    }
+
+    function renderRunList() {
+      const container = document.getElementById('runListContainer');
+      container.innerHTML = '';
+      state.runs.forEach(run => {
+        const div = document.createElement('div');
+        div.className = `run-entry ${run.run_id === state.currentRunId ? 'active' : ''}`;
+        div.onclick = () => selectRun(run.run_id);
+        
+        // determine if legacy
+        let isLegacy = false;
+        if (!run.stage && !run.task) isLegacy = true; // basic heuristic
+        
+        let statusColor = 'var(--text-sub)';
+        let statusText = run.status || 'unknown';
+        if (statusText === 'running') statusColor = 'var(--c-running)';
+        if (statusText === 'completed') statusColor = 'var(--c-success)';
+        if (statusText === 'failed') statusColor = 'var(--c-failed)';
+        
+        div.innerHTML = `
+          <h3>
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;">${run.task || run.run_id}</span>
+            ${isLegacy ? '<span class="badge legacy">Legacy</span>' : ''}
+          </h3>
+          <p>
+            <span style="color: ${statusColor}">● ${statusText}</span>
+            <span style="font-size: 0.7rem;">${new Date(run.started_at || run.updated_at || Date.now()).toLocaleTimeString()}</span>
+          </p>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function selectRun(runId) {
+      if (state.eventSource) {
+        state.eventSource.close();
+        state.eventSource = null;
+      }
+      state.currentRunId = runId;
+      state.currentRunData = null;
+      state.events = [];
+      state.selectedStage = null;
+      document.getElementById('errorContainer').innerHTML = '';
+      
+      renderRunList(); // update active class
+      
+      try {
+        const res = await fetch(`${API_BASE}/runs/${runId}`);
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          state.currentRunData = { error: data.error, detail: data.detail, run_id: runId };
+          renderTopBar();
+          renderErrorState();
+          return;
+        }
+        state.currentRunData = data;
+        renderTopBar();
+        
+        // start SSE
+        setupSSE(runId);
+        
+      } catch (err) {
+        state.currentRunData = { error: "fetch_failed", detail: err.message, run_id: runId };
+        renderTopBar();
+        renderErrorState();
+      }
+    }
+
+    function renderErrorState() {
+      const errData = state.currentRunData;
+      let msg = "Could not load run data.";
+      if (errData.error === 'malformed') msg = `Run state is malformed: ${errData.detail}`;
+      else if (errData.error === 'no_state') msg = `Run state missing (Legacy run): ${errData.detail || ''}`;
+      
+      document.getElementById('errorContainer').innerHTML = `<div class="error-block">${msg}</div>`;
+      document.getElementById('pipelineStepsContainer').innerHTML = '';
+      document.getElementById('pipelineProgress').innerText = '0/0';
+      document.getElementById('activityFeed').innerHTML = '';
+      renderInspector();
+    }
+
+    function renderTopBar() {
+      const data = state.currentRunData;
+      const el = document.getElementById('topBarInfo');
+      if (!data || data.error) {
+        el.innerHTML = `
+          <span><strong>ID:</strong> ${state.currentRunId}</span>
+        `;
+        return;
+      }
+      el.innerHTML = `
+        <span><strong>Task:</strong> ${data.task || '-'}</span>
+        <span><strong>ID:</strong> ${data.run_id || state.currentRunId}</span>
+        <span><strong>Branch:</strong> ${data.branch || '-'}</span>
+      `;
+    }
+
+    function setupSSE(runId) {
+      const es = new EventSource(`${API_BASE}/runs/${runId}/stream`);
+      state.eventSource = es;
+      
+      es.onmessage = (e) => {
+        try {
+          const evt = JSON.parse(e.data);
+          state.events.push(evt);
+          renderPipeline();
+          renderActivity();
+          if (state.selectedStage && evt.stage === state.selectedStage) {
+            renderInspector();
+          }
+        } catch (err) {}
+      };
+      
+      es.onerror = () => {
+        // Fallback to fetch events once if SSE fails or finishes
+        es.close();
+        fallbackFetchEvents(runId);
+      };
+    }
+    
+    async function fallbackFetchEvents(runId) {
+      try {
+        const res = await fetch(`${API_BASE}/runs/${runId}/events`);
+        if (res.ok) {
+          const evts = await res.json();
+          // avoid duplicates if SSE already sent some
+          if (evts.length > state.events.length) {
+            state.events = evts;
+            renderPipeline();
+            renderActivity();
+            renderInspector();
+          }
+        }
+      } catch (err) {}
+    }
+
+    function renderActivity() {
+      const feed = document.getElementById('activityFeed');
+      feed.innerHTML = '';
+      state.events.forEach(evt => {
+        const div = document.createElement('div');
+        div.className = 'log-line';
+        
+        let timeStr = '';
+        if (evt.time) {
+          const d = new Date(evt.time);
+          timeStr = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
+        }
+        
+        div.innerHTML = `
+          <span class="ts">${timeStr}</span>
+          <span class="event">${evt.type || 'event'}</span>
+          <span class="msg">${evt.message || ''} ${evt.stage ? `[${evt.stage}]` : ''}</span>
+        `;
+        feed.appendChild(div);
+      });
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    function getStageStatus(stageName, agentsMap, runState) {
+        if (agentsMap[stageName]) {
+            const a = agentsMap[stageName];
+            if (a.status === 'completed') {
+                return (a.verdict === 'PASS' || !a.verdict) ? 'success' : 'failed';
+            }
+            if (a.status === 'running') return 'running';
+            return 'waiting';
+        } else {
+            if (runState.status === 'completed') return 'success';
+            if (runState.stage === stageName) {
+                return runState.status === 'failed' ? 'failed' : 'running';
+            }
+            let currentIdx = STAGE_ORDER.indexOf(runState.stage);
+            let thisIdx = STAGE_ORDER.indexOf(stageName);
+            if (thisIdx < currentIdx && currentIdx !== -1) return 'success';
+            if (thisIdx > currentIdx && currentIdx !== -1) return 'waiting';
+            return 'success'; // fallback if current stage unknown
+        }
+    }
+    
+    function getStageIcon(status) {
+      if (status === 'success') return '<span class="icon success">✓</span>';
+      if (status === 'running') return '<span class="icon running">↻</span>';
+      if (status === 'failed') return '<span class="icon failed">✗</span>';
+      return '<span class="icon waiting">○</span>';
+    }
+
+    function renderPipeline() {
+      const container = document.getElementById('pipelineStepsContainer');
+      container.innerHTML = '';
+      
+      const runState = state.currentRunData;
+      if (!runState || runState.error) return;
+      
+      let activeStages = new Set();
+      state.events.forEach(e => { if (e.stage) activeStages.add(e.stage); });
+      
+      const agentsMap = {};
+      if (runState.agents) {
+          runState.agents.forEach(a => {
+              activeStages.add(a.role);
+              agentsMap[a.role] = a;
+          });
+      }
+      
+      let sortedStages = Array.from(activeStages).sort((a, b) => {
+          let idxA = STAGE_ORDER.indexOf(a);
+          let idxB = STAGE_ORDER.indexOf(b);
+          if (idxA === -1) idxA = 999;
+          if (idxB === -1) idxB = 999;
+          return idxA - idxB;
+      });
+      
+      let completedCount = 0;
+      
+      sortedStages.forEach((stageName, index) => {
+        const isAI = !!agentsMap[stageName];
+        const status = getStageStatus(stageName, agentsMap, runState);
+        
+        if (status === 'success') completedCount++;
+        
+        const card = document.createElement('div');
+        let classes = ['step-card', status];
+        if (!isAI) classes.push('system-step');
+        if (state.selectedStage === stageName) classes.push('active-inspector');
+        card.className = classes.join(' ');
+        card.onclick = () => {
+          state.selectedStage = stageName;
+          renderPipeline(); // update active-inspector border
+          renderInspector();
+        };
+        
+        let agentHtml = '';
+        let verdictHtml = '';
+        if (isAI) {
+          const a = agentsMap[stageName];
+          agentHtml = `
+            <div class="agent-info">
+              <span class="agent-name">${a.tool || 'unknown'}</span>
+              <span class="agent-model">${a.model || ''}</span>
+            </div>
+          `;
+          
+          let displayStatus = status.toUpperCase();
+          if (status === 'running') displayStatus = 'RUNNING...';
+          
+          verdictHtml = `
+            <div class="verdict-row">
+              <span class="status ${status}">${a.verdict || displayStatus}</span>
+            </div>
+          `;
+        }
+        
+        card.innerHTML = `
+          <div class="step-header">
+            <span>${index + 1}. ${stageName}</span>
+            ${getStageIcon(status)}
+          </div>
+          ${agentHtml}
+          ${verdictHtml}
+        `;
+        
+        container.appendChild(card);
+      });
+      
+      document.getElementById('pipelineProgress').innerText = `${completedCount}/${sortedStages.length} stages completed`;
+    }
+
+    function renderInspector() {
+      const container = document.getElementById('inspectorContent');
+      const stageNameEl = document.getElementById('inspectorStageName');
+      
+      if (!state.selectedStage) {
+        stageNameEl.style.display = 'none';
+        container.innerHTML = '<p style="color: var(--text-sub); font-size: 0.9rem;">Select a stage to view its events and details.</p>';
+        return;
+      }
+      
+      stageNameEl.style.display = 'inline-block';
+      stageNameEl.innerText = state.selectedStage;
+      
+      const stageEvents = state.events.filter(e => e.stage === state.selectedStage);
+      
+      let logsHtml = '';
+      if (stageEvents.length === 0) {
+        logsHtml = '<div style="color: var(--text-sub)">No events found for this stage.</div>';
+      } else {
+        logsHtml = stageEvents.map(e => {
+          const ts = e.time ? e.time.split('T')[1].replace('Z','') : '';
+          return `[${ts}] ${e.type}: ${e.message || ''}\n${e.agent ? `  Agent: ${e.agent} (${e.model})\n` : ''}`;
+        }).join('\n');
+        logsHtml = `<div class="inspector-logs">${logsHtml}</div>`;
+      }
+      
+      container.innerHTML = `
+        <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">Events for ${state.selectedStage}</div>
+        ${logsHtml}
+      `;
+    }
+
+    // Init
+    fetchRuns();
+    // Refresh run list every 10s just in case new runs appear
+    setInterval(() => {
+      // only refresh list if we aren't heavily interacting, but simple enough to just fetch
+      fetch(`${API_BASE}/runs`).then(r => r.json()).then(data => {
+        state.runs = data;
+        renderRunList();
+      }).catch(()=>{});
+    }, 10000);
+
+  </script>
+</body>
+</html>

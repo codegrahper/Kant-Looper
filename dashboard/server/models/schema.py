@@ -10,8 +10,26 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class AgentAttempt(BaseModel):
+    """STATE-CONTRACT.md §1 agents[].attempts[] 항목 — fallback 시도 이력 한 건.
+
+    tool/model은 실제로 시도된 도구, outcome은 failed|succeeded.
+    """
+    model_config = ConfigDict(extra="allow")
+
+    tool: Optional[str] = None
+    model: Optional[str] = None
+    outcome: Optional[str] = None
+    detail: Optional[str] = None
+
+
 class Agent(BaseModel):
-    """STATE-CONTRACT.md §1 agents[] 항목."""
+    """STATE-CONTRACT.md §1 agents[] 항목.
+
+    tool/model은 이 role을 실제로 완료(또는 최후 시도)한 도구를 가리킨다 —
+    fallback이 발생했으면 원래 실패한 도구가 아니라 최종 실행자로 갱신된다.
+    fallback 전체 이력은 attempts[]에 순서대로 남는다.
+    """
     model_config = ConfigDict(extra="allow")
 
     role: Optional[str] = None
@@ -19,6 +37,7 @@ class Agent(BaseModel):
     model: Optional[str] = None
     status: Optional[str] = None
     verdict: Optional[str] = None
+    attempts: list[AgentAttempt] = Field(default_factory=list)
 
 
 class Failure(BaseModel):

@@ -1,6 +1,6 @@
 ﻿# 멀티모델 코딩 에이전트·도구 호출 라우팅 가이드
 
-- 기준일: 2026-07-18
+- 기준일: 2026-07-24
 - 대상: nomad-kant-looper가 실제로 호출하는 5개 도구(codex, opencode, grok, agy, claude)와
   그 안에서 SKILL.md Step 2로 실제 선택 가능한 모델만 다룬다. 시장 전체 모델
   서베이가 아니다.
@@ -23,35 +23,45 @@
 
 ### OpenCode (Z.AI GLM / MiniMax)
 
-| 모델 | 특징 | 적합한 작업 |
-|---|---|---|
-| `glm-5.2` | 1M 컨텍스트, 장기 프로젝트 맥락 유지 | 대형 저장소, 장시간 리팩터링 |
-| `glm-4.7` | 실용형, 200K 컨텍스트, 비용·품질 균형 | 일상 개발 |
-| `MiniMax-M3` | 1M 컨텍스트, 장기 에이전트 작업 | 대형 저장소·장기 작업 (glm-5.2 대안) |
-| `MiniMax-M2.7` | 일반 코딩, 비용 균형 | 일상 개발 (glm-4.7 대안) |
+| 모델 | 특징 | 적합한 작업 | 등급 |
+|---|---|---|---|
+| `glm-5.2` | 1M 컨텍스트, 장기 프로젝트 맥락 유지 | 대형 저장소, 장시간 리팩터링 | PRIMARY_EFFICIENT |
+| `MiniMax-M3` | 1M 컨텍스트, 장기 에이전트 작업 | 대형 저장소·장기 작업 (glm-5.2 대안) | PRIMARY_EFFICIENT |
+| `glm-4.7` | 실용형, 200K 컨텍스트, 비용·품질 균형 | 일상 개발 (명시 호출만) | LEGACY_EMERGENCY |
+| `MiniMax-M2.7` | 일반 코딩, 비용 균형 | 일상 개발 (명시 호출만) | LEGACY_EMERGENCY |
+
+`glm-4.7`/`MiniMax-M2.7`은 2026-07-24부터 정상 자동 라우팅·fallback에서
+제외됐다 (삭제 아님 — `--agent opencode --model glm-4.7` 등 명시 호출은 계속
+지원, `KANT_ENABLE_LEGACY_FALLBACK=1`일 때만 emergency로 편입). 자세한 내용은
+`references/fallback-table.md` 참고.
 
 주의(2026-07-18 실측): 같은 조합(opencode + 같은 태스크)에서 glm-4.7이 verdict
 JSON을 누락하는 사례가 보고됐으나, 독립 재현 시 2/2 정상 통과해 재현이
-엇갈렸다. fallback-dispatcher가 이미 이 실패 클래스(INVALID_OUTPUT)의
-안전망이므로, 확실한 반복 재현 없이는 모델을 제거하지 않는다.
+엇갈렸다. 위 legacy 격리는 이 실패 사례와도 무관하지 않다 — 정상 경로에서
+빼두면 재현 안 되는 실패의 영향 범위도 함께 줄어든다.
 
 ### Grok (xAI)
 
 | 모델 | 특징 | 적합한 작업 |
 |---|---|---|
 | `grok-4.5` | 터미널, Rust/C/C++, 풀스택, 빠른 도구 루프 | 시스템/터미널 코딩 |
-| `grok-4.3` | 기존 API 통합, configurable reasoning | 통합 작업 |
-| `grok-build-0.1` | 저비용 코딩 에이전트 | 간단한 반복 작업 |
+
+`grok-4.3`, `grok-build-0.1`은 2026-07-24부로 호출 모델에서 삭제됐다
+(명시 호출도 거부됨 — `scripts/kant-loop.sh`의 `validate_agent_model_compatibility`
+가 즉시 거부). 필요하면 `grok-4.5` 하나로 대체한다.
 
 ### Antigravity (Google Gemini)
 
 | 모델 | 특징 | 적합한 작업 |
 |---|---|---|
-| `gemini-3.5-flash` | 멀티모달, 브라우저/UI, 빠른 반복 | UI/화면 기반 구현 |
+| `gemini-3.6-flash` | 멀티모달, 브라우저/UI, 빠른 반복 (기본값, Medium) | UI/화면 기반 구현 |
+| `gemini-3.5-flash` | 이전 기본값 | 명시 호출 지원 |
 | `gemini-3.1-pro-preview` | 복잡한 설계, 정밀한 reasoning | 복잡한 멀티모달 설계·분석 |
 
 agy는 Stitch MCP(Google UI 디자인 생성 도구)에 연결돼 있지만, 프롬프트에
 명시하지 않으면 쓰지 않는다 — 자세한 내용은 `references/agy-cli-notes.md` §6.
+agy CLI 버전별 모델 ID 형식 변화(1.1.3 → 1.1.5, `--effort` 플래그 등)도
+같은 문서 §5-1에 기록돼 있다.
 
 ### Claude
 
@@ -63,8 +73,8 @@ agy는 Stitch MCP(Google UI 디자인 생성 도구)에 연결돼 있지만, 프
 
 | 등급 | 설명 | 모델 예 |
 |---|---|---|
-| T0 | 읽기·요약·정형 변환 | `gpt-5.6-luna`, `gemini-3.5-flash`, `MiniMax-M2.7` |
-| T1 | 한두 파일·완료 조건 명확 | `gpt-5.6-terra`, `gemini-3.5-flash`, `glm-4.7`, `MiniMax-M2.7` |
+| T0 | 읽기·요약·정형 변환 | `gpt-5.6-luna`, `gemini-3.6-flash`, `MiniMax-M3` |
+| T1 | 한두 파일·완료 조건 명확 | `gpt-5.6-terra`, `gemini-3.6-flash`, `glm-5.2`, `MiniMax-M3` |
 | T2 | 여러 파일·일반 설계 판단 | `gpt-5.6-terra`, `glm-5.2`, `grok-4.5` |
 | T3 | 저장소 전체 영향·모호성 큼 | `gpt-5.6-sol`, `glm-5.2`, `grok-4.5`, `MiniMax-M3`, `gemini-3.1-pro-preview` |
 | T4 | 장기·다중 시스템·고위험 | 클로드가 계획·구현자 선정·독립 리뷰를 매번 직접 조합한다. 자동 상향 체인은 없다 |
@@ -116,8 +126,6 @@ verdict 스키마 상세는 `references/archive/hprar/verdict-schema.md` 참고.
 
 ### xAI
 - Grok 4.5: https://docs.x.ai/developers/grok-4-5
-- Grok Build: https://docs.x.ai/build/overview
-- Grok Build 0.1: https://docs.x.ai/developers/models/grok-build-0.1
 
 ### Google
 - Antigravity: https://antigravity.google/

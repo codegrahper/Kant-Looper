@@ -83,6 +83,7 @@
   .agent-info { display: flex; flex-direction: column; margin-bottom: 1.25rem; }
   .agent-name { font-weight: bold; font-size: 0.95rem; color: var(--text); }
   .agent-model { font-size: 0.75rem; color: var(--text-sub); margin-top: 0.25rem; }
+  .fallback-badge { align-self: flex-start; font-size: 0.65rem; font-weight: 600; background: #f59e0b; color: #fff; padding: 0.1rem 0.45rem; border-radius: 4px; margin-top: 0.4rem; cursor: help; }
   
   .verdict-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; font-weight: 600; }
   .step-card.system-step .verdict-row { display: none; }
@@ -482,10 +483,15 @@
         let verdictHtml = '';
         if (isAI) {
           const a = agentsMap[stageName];
+          const failedAttempts = (a.attempts || []).filter(x => x.outcome === 'failed');
+          const fallbackBadge = failedAttempts.length > 0
+            ? `<span class="fallback-badge" title="${failedAttempts.map(x => `${x.tool}:${x.model} 실패`).join(', ')}">⚠ 폴백 ${failedAttempts.length}회</span>`
+            : '';
           agentHtml = `
             <div class="agent-info">
               <span class="agent-name">${a.tool || 'unknown'}</span>
               <span class="agent-model">${a.model || ''}</span>
+              ${fallbackBadge}
             </div>
           `;
           

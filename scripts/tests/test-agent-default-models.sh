@@ -41,7 +41,7 @@ get_default_model() {
     codex)    echo "gpt-5.6-sol" ;;
     opencode) echo "glm-5.2" ;;
     grok)     echo "grok-4.5" ;;
-    agy)      echo "gemini-3.5-flash" ;;
+    agy)      echo "gemini-3.6-flash" ;;
     claude)   echo "default" ;;
     *)        echo "" ;;
   esac
@@ -76,6 +76,12 @@ validate_agent_model_compatibility() {
         echo "ERROR: grok requires grok-* model, got '$model'" >&2
         return 1
       fi
+      case "$model" in
+        grok-4.3|grok-build-0.1)
+          echo "ERROR: grok model '$model' was removed from nomad-kant-looper (2026-07-24) — use grok-4.5" >&2
+          return 1
+          ;;
+      esac
       ;;
     agy)
       if ! echo "$model" | grep -qE '^gemini-'; then
@@ -108,7 +114,7 @@ test_default_model() {
 test_default_model "codex" "gpt-5.6-sol"
 test_default_model "opencode" "glm-5.2"
 test_default_model "grok" "grok-4.5"
-test_default_model "agy" "gemini-3.5-flash"
+test_default_model "agy" "gemini-3.6-flash"
 test_default_model "claude" "default"
 test_default_model "unknown" ""
 
@@ -136,7 +142,7 @@ test_compat_valid "opencode" "glm-4.7"
 test_compat_valid "opencode" "MiniMax-M3"
 test_compat_valid "opencode" "MiniMax-M2.7"
 test_compat_valid "grok" "grok-4.5"
-test_compat_valid "grok" "grok-4.3"
+test_compat_valid "agy" "gemini-3.6-flash"
 test_compat_valid "agy" "gemini-3.5-flash"
 test_compat_valid "agy" "gemini-3.1-pro-preview"
 test_compat_valid "claude" "default"
@@ -167,6 +173,8 @@ test_compat_invalid "opencode" "MiniMax-M2.7-highspeed"
 test_compat_invalid "opencode" "MiniMax-M2.5-highspeed"
 test_compat_invalid "grok" "gpt-5.6-sol"
 test_compat_invalid "grok" "glm-5.2"
+test_compat_invalid "grok" "grok-4.3"
+test_compat_invalid "grok" "grok-build-0.1"
 test_compat_invalid "agy" "gpt-5.6-sol"
 test_compat_invalid "agy" "glm-5.2"
 test_compat_invalid "claude" "MiniMax-M3"

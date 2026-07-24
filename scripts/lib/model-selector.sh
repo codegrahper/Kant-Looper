@@ -53,12 +53,11 @@ EOF
     grok)
       cat <<EOF
 grok-4.5
-grok-4.3
-grok-build-0.1
 EOF
       ;;
     agy)
       cat <<EOF
+gemini-3.6-flash
 gemini-3.5-flash
 gemini-3.1-pro-preview
 EOF

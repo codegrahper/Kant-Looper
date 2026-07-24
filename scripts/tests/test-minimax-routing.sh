@@ -13,6 +13,7 @@ SKILL_ROOT="$(cd "$LIB_DIR/../.." && pwd)"
 MODEL_SELECTOR="$SKILL_ROOT/scripts/lib/model-selector.sh"
 ADAPTER_OPENCODE="$SKILL_ROOT/scripts/adapters/adapter-opencode.sh"
 ADAPTER_CLAUDE="$SKILL_ROOT/scripts/adapters/adapter-claude.sh"
+FALLBACK_DISPATCHER="$SKILL_ROOT/scripts/lib/fallback-dispatcher.sh"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -409,6 +410,57 @@ else
   echo "${GREEN}PASS${NC}: claude|default found in fallback chains"
   PASSED=$((PASSED + 1))
 fi
+
+# ----------------------------------------------------------------------------
+# Test F: 정상 routing pool 소속 여부 — glm-5.2/MiniMax-M3는 pool 안, glm-4.7/M2.7은 pool 밖
+# ----------------------------------------------------------------------------
+
+echo ""
+echo "=== Normal routing pool membership (KANT_ENABLE_LEGACY_FALLBACK unset = 0) ==="
+
+unset KANT_ENABLE_LEGACY_FALLBACK
+
+# 체인은 콤마 구분 "tool:model" 단일 문자열이므로, assert_contains/assert_not_contains의
+# 줄 단위(-x) 매칭에 맞춰 콤마를 개행으로 바꿔서 넘긴다.
+chain_lines() { printf '%s' "$1" | tr ',' '\n'; }
+
+glm52_chain="$("$FALLBACK_DISPATCHER" chain opencode glm-5.2)"
+assert_contains "MiniMax-M3 ∈ normal routing pool (glm-5.2 fallback chain)" "opencode:MiniMax-M3" "$(chain_lines "$glm52_chain")"
+assert_not_contains "glm-4.7 ∉ normal routing pool (glm-5.2 fallback chain)" "opencode:glm-4.7" "$(chain_lines "$glm52_chain")"
+assert_not_contains "MiniMax-M2.7 ∉ normal routing pool (glm-5.2 fallback chain)" "opencode:MiniMax-M2.7" "$(chain_lines "$glm52_chain")"
+
+m3_chain="$("$FALLBACK_DISPATCHER" chain opencode MiniMax-M3)"
+assert_contains "glm-5.2 ∈ normal routing pool (MiniMax-M3 fallback chain)" "opencode:glm-5.2" "$(chain_lines "$m3_chain")"
+assert_not_contains "glm-4.7 ∉ normal routing pool (MiniMax-M3 fallback chain)" "opencode:glm-4.7" "$(chain_lines "$m3_chain")"
+assert_not_contains "MiniMax-M2.7 ∉ normal routing pool (MiniMax-M3 fallback chain)" "opencode:MiniMax-M2.7" "$(chain_lines "$m3_chain")"
+
+agy_chain="$("$FALLBACK_DISPATCHER" chain agy gemini-3.6-flash)"
+assert_not_contains "glm-4.7 ∉ normal routing pool (agy fallback chain)" "opencode:glm-4.7" "$(chain_lines "$agy_chain")"
+assert_not_contains "MiniMax-M2.7 ∉ normal routing pool (agy fallback chain)" "opencode:MiniMax-M2.7" "$(chain_lines "$agy_chain")"
+
+# ----------------------------------------------------------------------------
+# Test G: KANT_ENABLE_LEGACY_FALLBACK gating
+# ----------------------------------------------------------------------------
+
+echo ""
+echo "=== KANT_ENABLE_LEGACY_FALLBACK=0 (default): legacy 모델이 fallback에 없어야 한다 ==="
+
+glm52_chain_off="$(KANT_ENABLE_LEGACY_FALLBACK=0 "$FALLBACK_DISPATCHER" chain opencode glm-5.2)"
+assert_not_contains "legacy=0: glm-4.7 not in glm-5.2 chain" "opencode:glm-4.7" "$(chain_lines "$glm52_chain_off")"
+assert_not_contains "legacy=0: MiniMax-M2.7 not in glm-5.2 chain" "opencode:MiniMax-M2.7" "$(chain_lines "$glm52_chain_off")"
+
+echo ""
+echo "=== KANT_ENABLE_LEGACY_FALLBACK=1: primary pool 소진 후 legacy 모델이 emergency로 나타나야 한다 ==="
+
+glm52_chain_on="$(KANT_ENABLE_LEGACY_FALLBACK=1 "$FALLBACK_DISPATCHER" chain opencode glm-5.2)"
+assert_contains "legacy=1: glm-4.7 appears as emergency in glm-5.2 chain" "opencode:glm-4.7" "$(chain_lines "$glm52_chain_on")"
+assert_contains "legacy=1: MiniMax-M2.7 appears as emergency in glm-5.2 chain" "opencode:MiniMax-M2.7" "$(chain_lines "$glm52_chain_on")"
+
+# glm-4.7 자신이 실패한 원본일 때는 emergency 목록에 자기 자신을 재삽입하지 않는다
+# (INVALID_OUTPUT 실측 사례 — 동일 모델 반복 재시도 금지)
+glm47_chain_on="$(KANT_ENABLE_LEGACY_FALLBACK=1 "$FALLBACK_DISPATCHER" chain opencode glm-4.7)"
+assert_not_contains "legacy=1: glm-4.7 does not re-add itself to its own fallback chain" "opencode:glm-4.7" "$(chain_lines "$glm47_chain_on")"
+assert_contains "legacy=1: MiniMax-M2.7 still appears as emergency in glm-4.7's own chain" "opencode:MiniMax-M2.7" "$(chain_lines "$glm47_chain_on")"
 
 # ----------------------------------------------------------------------------
 # Results

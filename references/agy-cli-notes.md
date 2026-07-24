@@ -101,6 +101,44 @@ kant-looper 내부 식별자(`model-selector.sh`, `fallback-dispatcher.sh`,
 (opencode 어댑터의 provider 정규화 패턴과 동일). 매핑 테이블에 없는
 이름은 WARN 로그 후 raw 값 그대로 시도(어댑터 방어적 폴백).
 
+### 5-1. agy 1.1.5 갱신 (2026-07-24 확인) — Gemini 3.6 Flash 추가 + `--effort` 신규 플래그
+
+`agy --version` = 1.1.5에서 `agy models`가 내놓는 형식이 표시 이름이 아니라
+소문자 canonical ID(`gemini-3.6-flash-medium` 등)로 바뀌었다:
+
+```
+gemini-3.6-flash-high
+gemini-3.6-flash-medium
+gemini-3.6-flash-low
+gemini-3.5-flash-high
+gemini-3.5-flash-medium
+gemini-3.5-flash-low
+gemini-3.1-pro-high
+gemini-3.1-pro-low
+claude-sonnet-4-6
+claude-opus-4-6-thinking
+gpt-oss-120b-medium
+```
+
+실측 확인 결과 (`--sandbox read-only --mode plan`으로 실제 호출):
+
+- `--model "gemini-3.6-flash-medium"` (canonical ID) → **동작함**
+- `--model "Gemini 3.6 Flash (Medium)"` (기존 표시 이름 패턴) → **여전히 동작함**
+- `--model "Gemini 3.6 Flash (Low)"` / `"Gemini 3.6 Flash (High)"` → **동작함**
+- `--model "gemini-3.6-flash"` (레벨 없는 bare 이름) → **거부됨**:
+  ```
+  Error: invalid model selection (--model "gemini-3.6-flash" --effort ""):
+  --model gemini-3.6-flash requires --effort (available: low, medium, high)
+  ```
+  즉 CLI에 새 `--effort low|medium|high` 플래그가 생겼고, bare 모델 이름은
+  이 플래그와 짝지어야 한다. kant-looper는 이 신규 인터페이스를 채택하지
+  않고 기존처럼 **완전한 표시 이름을 `--model`에 통째로 넘기는 방식을 유지**한다
+  (`adapter-agy.sh`의 `gemini-3.6-flash` → `"Gemini 3.6 Flash (Medium)"` 정규화).
+  `--effort` 플래그 자체는 아직 어댑터에서 쓰지 않음 — 필요해지면 별도 조사.
+
+결론: 표시 이름 정규화 방식(5번 항목의 패턴)은 agy 1.1.5에서도 그대로 유효하다.
+`gemini-3.5-flash` 관련 매핑은 회귀 없이 계속 동작 확인됨.
+
 ## 6. Stitch MCP는 시켜야 쓴다 — 알아서 안 씀
 
 agy는 GEMINI.md 설정으로 Stitch MCP(Google의 UI 디자인 생성 도구, GCP 프로젝트 "Stitch")에

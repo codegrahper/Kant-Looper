@@ -162,17 +162,18 @@ Nomad Kant Looper, 칸트와 유랑하세요. 👋
 
 **OpenCode:**
 - `opencode:glm-5.2` (1M 컨텍스트 - 대형 저장소, 장시간 리팩터링)
-- `opencode:glm-4.7` (실용형 - 일상 개발, 비용·품질 균형)
 - `opencode:MiniMax-M3` (1M 컨텍스트, 장기 에이전트)
-- `opencode:MiniMax-M2.7` (일반 코딩, 비용 균형)
+- `opencode:glm-4.7` (legacy/emergency 전용 — 정상 자동 라우팅 제외, 명시 호출은 계속 지원)
+- `opencode:MiniMax-M2.7` (legacy/emergency 전용 — 정상 자동 라우팅 제외, 명시 호출은 계속 지원)
 
 **Grok:**
 - `grok:grok-4.5` (터미널, Rust/C/C++, 풀스택, 빠른 도구 루프)
-- `grok:grok-4.3` (기존 API 통합, configurable reasoning)
-- `grok:grok-build-0.1` (저비용 코딩 에이전트)
+
+`grok-4.3`, `grok-build-0.1`은 2026-07-24부로 호출 모델에서 삭제됐다 (명시 호출도 거부됨).
 
 **Antigravity:**
-- `agy:gemini-3.5-flash` (멀티모달, 브라우저/UI, 빠른 반복)
+- `agy:gemini-3.6-flash` (기본값, Medium — 멀티모달, 브라우저/UI, 빠른 반복)
+- `agy:gemini-3.5-flash` (이전 기본값 — 명시 호출 지원)
 - `agy:gemini-3.1-pro-preview` (복잡한 설계, 정밀한 reasoning)
 
 `agy`를 선택하면 모델 선택과 함께 다음 Stitch 선택 UI를 띄운다. 모델이 이미
@@ -184,11 +185,12 @@ Nomad Kant Looper, 칸트와 유랑하세요. 👋
 
 자동 기본값을 고르지 않고 반드시 사용자가 직접 선택하게 한다.
 
-`agy` CLI 1.1.x는 `--model` 플래그에 표시 이름(`Gemini 3.5 Flash (Medium)` 등)만 받는다.
-nomad-kant-looper는 내부적으로 짧은 ID(`gemini-3.5-flash`)를 그대로 쓰고,
+`agy` CLI 1.1.x는 `--model` 플래그에 표시 이름(`Gemini 3.6 Flash (Medium)` 등)만 받는다.
+nomad-kant-looper는 내부적으로 짧은 ID(`gemini-3.6-flash`)를 그대로 쓰고,
 `scripts/adapters/adapter-agy.sh`가 어댑터 호출 시점에 표시 이름으로 정규화한다.
-`gemini-3.1-flash-lite`는 agy 1.1.x에서 사라졌다. 저비용 서브태스크는
-`gemini-3.5-flash` 한 가지로 충분하다.
+`gemini-3.1-flash-lite`는 agy 1.1.x에서 사라졌다. agy의 기본 모델은
+2026-07-24부터 `gemini-3.6-flash`(Medium)이며, `gemini-3.5-flash`는 명시 호출로
+계속 지원한다. 자세한 CLI 버전별 확인 내역은 `references/agy-cli-notes.md` 참고.
 
 **Claude:**
 - Claude uses its own default models
@@ -603,7 +605,7 @@ kant-loop.sh run TASK.md --quick --agent codex --model gpt-5.6-terra
 kant-loop.sh run TASK.md --quick --chain opencode:glm-5.2,codex:gpt-5.6-sol,codex:gpt-5.6-terra
 
 # 동시성: --parallel (읽기 전용 검토, --chain 필수)
-kant-loop.sh run TASK.md --parallel --chain codex:gpt-5.6-terra,opencode:glm-5.2,agy:gemini-3.5-flash
+kant-loop.sh run TASK.md --parallel --chain codex:gpt-5.6-terra,opencode:glm-5.2,agy:gemini-3.6-flash
 kant-loop.sh run TASK.md --no-auto-commit  # PASS까지만, commit은 사용자가
 
 # 백그라운드 (장기 작업)
@@ -651,7 +653,7 @@ kant-loop.sh cleanup --apply
 
 | 키워드 | 라우트 |
 |---|---|
-| UI, component, screen, stitch, modal, css, frontend | agy (gemini-3.5-flash) |
+| UI, component, screen, stitch, modal, css, frontend | agy (gemini-3.6-flash) |
 | 단위 테스트, fixture, mock | codex (gpt-5.6-luna) |
 | 리팩터, migrate, cleanup | opencode (glm-5.2) |
 | 터미널, cli, rust, c++ | grok (grok-4.5) |

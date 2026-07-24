@@ -4,42 +4,87 @@
 
 이 표는 **skill 폴더 내부 SSOT**입니다. 절대 외부 경로 참조 안 함. 갱신은 `/nomad-kant-looper update-guide` 또는 이 파일 직접 편집.
 
+## 모델 등급 (2026-07-24, Gemini 3.6 Flash 전환)
+
+```text
+PRIMARY_EFFICIENT
+- glm-5.2
+- MiniMax-M3
+- gemini-3.6-flash (medium)
+
+ESCALATION
+- Codex
+- Claude
+
+LEGACY_EMERGENCY
+- glm-4.7
+- MiniMax-M2.7
+```
+
+`LEGACY_EMERGENCY`는 **삭제가 아니다**. `glm-4.7`/`MiniMax-M2.7`은 `model-selector.sh`에
+계속 남아 있고 `--agent opencode --model ...` 명시 호출은 항상 지원한다. 다만 정상
+자동 라우팅·기본 모델·fallback 경로에서는 제외되고, `KANT_ENABLE_LEGACY_FALLBACK=1`
+(기본값 `0`)일 때만 primary pool이 모두 소진된 뒤 emergency 후보로 편입된다
+(`scripts/lib/fallback-dispatcher.sh`의 `KANT_LEGACY_EMERGENCY_POOL` +
+`_maybe_insert_legacy_emergency()`). 즉 `SUPPORTED ≠ PRIMARY ≠ AUTOMATIC FALLBACK`.
+
+glm-4.7은 실측에서 산출물은 정상인데 verdict parsing이 실패(`INVALID_OUTPUT`)한 사례가
+있어, emergency 편입 시에도 실패한 원본 모델 자신은 재삽입하지 않고 즉시 다음 모델로
+넘어간다.
+
 ## 코드 매핑 (script에서 사용)
 
+**(2026-07-24 재설계)** 이전에는 도구별로 사람이 손으로 "fallback_1/2/3"을 나열했다.
+지금은 대신 **T0~T3 난이도 티어 풀**을 정의하고, 실패한 (tool,model)이 속한 가장
+낮은 티어부터 같은 티어의 다른 provider를 우선 시도한 뒤 상위 티어로 확장하는
+방식으로 체인을 **자동 생성**한다 (`scripts/lib/fallback-dispatcher.sh`의
+`KANT_TIER_POOLS` + `get_tier_fallback_chain()`). "실패하면 감당 못 할 만큼 비싼
+모델로 바로 건너뛰지 않고, 비슷한 체급부터 시도한다"는 원칙이다. 티어 풀은
+`references/multimodel-coding-agent-routing-guide.md` §2의 T0~T3 표와 동일하다
+(모델 하나가 여러 티어에 걸칠 수 있다 — 예: `glm-5.2`는 T1~T3 모두).
+
 ```yaml
-fallback_chains:
-  codex:
-    primary: openai/gpt-5.6-sol
-    fallback_1: openai/gpt-5.6-terra   # 더 가벼움
-    fallback_2: zai/glm-5.2            # 다른 공급자
-    fallback_3: xai/grok-4.5           # 다른 공급자
-    final: claude:default               # claude 구독 로그인, --model 미지정
-    on_429: wait 30s + other_provider
-    on_401: immediate other_provider
-    on_timeout: lighter_same_provider
+tier_pools:
+  T0:  # 읽기·요약·정형 변환
+    - codex:gpt-5.6-luna
+    - agy:gemini-3.6-flash
+    - opencode:MiniMax-M3
+  T1:  # 한두 파일·완료 조건 명확
+    - codex:gpt-5.6-terra
+    - agy:gemini-3.6-flash
+    - opencode:glm-5.2
+    - opencode:MiniMax-M3
+  T2:  # 여러 파일·일반 설계 판단
+    - codex:gpt-5.6-terra
+    - opencode:glm-5.2
+    - grok:grok-4.5
+  T3:  # 저장소 전체 영향·모호성 큼
+    - codex:gpt-5.6-sol
+    - opencode:glm-5.2
+    - grok:grok-4.5
+    - opencode:MiniMax-M3
+    - agy:gemini-3.1-pro-preview
 
-  grok:
-    primary: xai/grok-4.5
-    fallback_1: openai/gpt-5.6-terra   # 다른 공급자
-    fallback_2: zai/glm-5.2
-    final: claude:default
-
-  opencode:
-    primary: zai/glm-5.2
-    fallback_1: zai/glm-4.7            # 같은 공급자, 더 가벼움
-    fallback_2: openai/gpt-5.6-terra
-    final: claude:default
-
-  agy:
-    primary: google/gemini-3.5-flash
-    fallback_1: google/gemini-3.1-pro-preview  # 같은 공급자, 더 강함
-    fallback_2: zai/glm-5.2
-    final: claude:default
-
-  claude:
-    primary: claude:default (구독 로그인)
-    fallback: null  # 마지막 폴백
+# 예: opencode:glm-5.2 실패 → 가장 낮은 소속 티어(T1)부터 시작
+#   T1 동료(codex:gpt-5.6-terra, agy:gemini-3.6-flash, opencode:MiniMax-M3)
+#   → T2 확장(grok:grok-4.5) → T3 확장(codex:gpt-5.6-sol, agy:gemini-3.1-pro-preview)
+#   → claude:default (항상 마지막)
 ```
+
+정상 primary 8종(codex 3개 + opencode glm-5.2/MiniMax-M3 + agy gemini-3.6-flash +
+grok-4.5)은 전부 이 티어 시스템으로 처리된다. 아래 4개는 티어 풀에 없는 **특수
+케이스**라 `KANT_FALLBACK_CHAINS_LINEAR` 고정 테이블이 별도로 처리한다:
+
+```yaml
+special_cases:
+  claude:default: [claude:default]  # 자기 자신 self-loop, 더 갈 곳 없음
+  opencode:glm-4.7: [codex:gpt-5.6-terra, agy:gemini-3.6-flash, grok:grok-4.5, claude:default]        # legacy 명시 호출 실패 시
+  opencode:MiniMax-M2.7: [codex:gpt-5.6-terra, agy:gemini-3.6-flash, grok:grok-4.5, claude:default]   # legacy 명시 호출 실패 시
+  agy:gemini-3.5-flash: [agy:gemini-3.6-flash, opencode:glm-5.2, claude:default]  # 이전 기본값 명시 호출 호환
+```
+
+on_429/on_401/on_timeout 등 백오프 정책은 티어와 무관하게 그대로 유지 —
+`get_backoff_seconds()` 참고 (아래 실패 모드 표).
 
 ## 실패 모드별 1차 / 최종 대응
 
@@ -90,7 +135,7 @@ routes:
       - google/gemini-3.5-flash
 
   visual_browser:
-    primary: google/gemini-3.5-flash
+    primary: google/gemini-3.6-flash (medium)
     harness: antigravity
     fallbacks:
       - minimax/MiniMax-M3
@@ -109,8 +154,8 @@ tool_to_default_model:
   codex_review: openai/gpt-5.6-sol   # 검증 단계
   grok: xai/grok-4.5
   opencode: zai/glm-5.2
-  opencode_quick: zai/glm-4.7        # T1 작업 시
-  agy: google/gemini-3.5-flash       # Antigravity default
+  opencode_quick: minimax/MiniMax-M3 # T1 작업 시 (glm-4.7은 emergency 전용으로 이동)
+  agy: google/gemini-3.6-flash (medium)  # Antigravity default (2026-07-24부터, 이전 gemini-3.5-flash)
   claude: default                    # claude 구독 로그인, --model 미지정
 ```
 
@@ -186,10 +231,21 @@ no_progress_limits:
 6. 다음 작업부터 새 매핑 자동 적용
 
 `references/fallback-table.md`는 사람이 읽는 참고 문서일 뿐이다. 실제
-폴백 체인은 `scripts/lib/fallback-dispatcher.sh`의 하드코딩된
-`KANT_FALLBACK_CHAINS_LINEAR` 배열이 정의한다. 이 표를 고쳐도 실제 동작은
-바뀌지 않는다 — 동작을 바꾸려면 `fallback-dispatcher.sh`를 직접 수정해야
-한다. Code is authoritative, documentation is descriptive.
+폴백 체인은 `scripts/lib/fallback-dispatcher.sh`의 `KANT_TIER_POOLS`
+(정상 primary 8종 자동 생성) + `KANT_FALLBACK_CHAINS_LINEAR` 고정 테이블
+(특수 케이스 4종)이 정의한다. 이 표를 고쳐도 실제 동작은 바뀌지 않는다 —
+동작을 바꾸려면 `fallback-dispatcher.sh`를 직접 수정해야 한다. Code is
+authoritative, documentation is descriptive.
+
+## Dashboard 가시성 (2026-07-24 추가)
+
+fallback이 실제로 발생하면 시도한 모든 (tool,model)과 최종 성공한 조합이
+`scripts/lib/state_writer.py`를 거쳐 해당 run의 `run-state.json`
+(`agents[].attempts[]`)과 `events.jsonl`(`fallback_attempt_*` 이벤트)에
+그대로 남는다 — Kant Dashboard의 Pipeline/Activity 뷰에서 "누가 실패했고
+최종적으로 누가 처리했는지"를 볼 수 있다. 스키마는
+`docs/dashboard/STATE-CONTRACT.md` §1(agents[].attempts[])·§2
+(fallback_attempt_* 이벤트) 참고.
 
 ## 환경별 기본값 오버라이드
 

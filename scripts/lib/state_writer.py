@@ -70,11 +70,29 @@ def _classify(first: str, rest: str):
         return {"type": "agent_verdict", "stage": None, "agent": None, "model": None,
                 "message": f"verdict {verdict}", "verdict": verdict}
     if first == "ADAPTER_FAIL":
-        return {"type": "agent_failed", "stage": None, "agent": d.get("tool"),
+        return {"type": "agent_failed", "stage": d.get("role"), "agent": d.get("tool"),
                 "model": d.get("model"), "message": f"adapter failed mode={d.get('mode')} rc={d.get('rc')}"}
     if first == "FALLBACK_USED":
         return {"type": "fallback_used", "stage": None, "agent": None, "model": None,
                 "message": "fallback used"}
+    if first == "FALLBACK_ATTEMPT":
+        status = d.get("status")
+        tool, model = d.get("tool"), d.get("model")
+        ev_type = {
+            "trying": "fallback_attempt_started",
+            "failed": "fallback_attempt_failed",
+            "success": "fallback_attempt_succeeded",
+        }.get(status, "fallback_attempt")
+        msg = f"fallback attempt {tool}:{model} {status}"
+        if status == "trying" and d.get("from"):
+            msg = f"fallback attempt {tool}:{model} (replacing {d.get('from')})"
+        if status == "failed" and d.get("mode"):
+            msg += f" ({d.get('mode')})"
+        return {"type": ev_type, "stage": d.get("role"), "agent": tool, "model": model,
+                "message": msg}
+    if first == "FALLBACK_EXHAUSTED":
+        return {"type": "fallback_exhausted", "stage": d.get("role"), "agent": None, "model": None,
+                "message": f"fallback exhausted, from={d.get('from')} chain={d.get('chain')}"}
     if first == "CHANGED_FILES_MISMATCH:":
         return {"type": "changed_files_mismatch", "stage": "gate", "agent": None,
                 "model": None, "message": rest}
@@ -139,14 +157,40 @@ def _derive_agents(events, status) -> list:
 
     verdict/model 상세는 status --json 에 없으므로 phase-events.log 를 소스로 삼는다
     (worktree 의 .kant-looper/*.json 보다 영속적이라 더 안정적).
+
+    fallback이 발생하면 원래 실패한 tool/model이 아니라 실제로 성공(또는 최후 시도)한
+    tool/model이 tool/model 필드에 반영되도록 갱신한다 — 폴백으로 넘어갔는데도
+    화면/상태에는 원래 실패한 도구가 성공한 것처럼 보이는 오표기를 막기 위함
+    (2026-07-24, Dashboard 신뢰성 개선). 시도된 전체 이력은 attempts[]에 남는다.
     """
     agents = []
     cur = None
     for e in events:
         if e["type"] == "agent_started":
             cur = {"role": e.get("stage"), "tool": e.get("agent"),
-                   "model": e.get("model"), "status": "running", "verdict": None}
+                   "model": e.get("model"), "status": "running", "verdict": None,
+                   "attempts": []}
             agents.append(cur)
+        elif e["type"] == "agent_failed" and cur is not None:
+            cur["attempts"].append({
+                "tool": e.get("agent"), "model": e.get("model"),
+                "outcome": "failed", "detail": e.get("message"),
+            })
+        elif e["type"] == "fallback_attempt_failed" and cur is not None:
+            cur["attempts"].append({
+                "tool": e.get("agent"), "model": e.get("model"),
+                "outcome": "failed", "detail": e.get("message"),
+            })
+        elif e["type"] == "fallback_attempt_succeeded" and cur is not None:
+            cur["attempts"].append({
+                "tool": e.get("agent"), "model": e.get("model"),
+                "outcome": "succeeded",
+            })
+            # 실제 실행자로 갱신 — 이 시점부터는 cur["tool"]/["model"]이 진짜 승자를 가리킨다
+            if e.get("agent"):
+                cur["tool"] = e.get("agent")
+            if e.get("model"):
+                cur["model"] = e.get("model")
         elif e["type"] == "agent_verdict" and cur is not None:
             v = e.get("verdict")
             cur["verdict"] = v

@@ -324,7 +324,7 @@ get_default_model() {
     codex)    echo "gpt-5.6-sol" ;;
     opencode) echo "glm-5.2" ;;
     grok)     echo "grok-4.5" ;;
-    agy)      echo "gemini-3.5-flash" ;;
+    agy)      echo "gemini-3.6-flash" ;;
     claude)   echo "default" ;;
     *)        echo "" ;;
   esac
@@ -363,6 +363,12 @@ validate_agent_model_compatibility() {
         echo "ERROR: grok requires grok-* model, got '$model'" >&2
         return 1
       fi
+      case "$model" in
+        grok-4.3|grok-build-0.1)
+          echo "ERROR: grok model '$model' was removed from nomad-kant-looper (2026-07-24) — use grok-4.5" >&2
+          return 1
+          ;;
+      esac
       ;;
     agy)
       if ! echo "$model" | grep -qE '^gemini-'; then
@@ -471,11 +477,11 @@ EOF
     local failure_mode="${output#FAIL:}"
     [ -z "$failure_mode" ] || [ "$failure_mode" = "$output" ] && failure_mode="INFRA_ERROR"
 
-    log_event "$state_dir" "ADAPTER_FAIL tool=$tool model=$model mode=$failure_mode rc=$rc"
+    log_event "$state_dir" "ADAPTER_FAIL role=$role tool=$tool model=$model mode=$failure_mode rc=$rc"
 
     # fallback_dispatcher로 다른 도구/모델로 전환 시도
     local fallback_result
-    fallback_result=$("$LIB_DIR/fallback-dispatcher.sh" run "$tool" "$model" "$failure_mode" "$prompt_file" "$worktree" "$role" 2>>"$state_dir/phase-events.log" || echo "")
+    fallback_result=$("$LIB_DIR/fallback-dispatcher.sh" run "$tool" "$model" "$failure_mode" "$prompt_file" "$worktree" "$role" "$state_dir" 2>>"$state_dir/phase-events.log" || echo "")
 
     if [ -n "$fallback_result" ] && [[ "$fallback_result" != FAIL:* ]]; then
       log_event "$state_dir" "FALLBACK_USED result=$fallback_result"

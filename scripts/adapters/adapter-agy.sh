@@ -84,6 +84,15 @@ call() {
 
   local normalized_model="$model"
   case "$model" in
+    gemini-3.6-flash)
+      normalized_model="Gemini 3.6 Flash (Medium)"
+      ;;
+    gemini-3.6-flash-low)
+      normalized_model="Gemini 3.6 Flash (Low)"
+      ;;
+    gemini-3.6-flash-high)
+      normalized_model="Gemini 3.6 Flash (High)"
+      ;;
     gemini-3.5-flash)
       normalized_model="Gemini 3.5 Flash (Medium)"
       ;;
